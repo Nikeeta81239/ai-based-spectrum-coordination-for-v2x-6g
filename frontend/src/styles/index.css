@@ -1,0 +1,2 @@
+/* Backwards-compatible entry point. New code imports tailwind.css directly. */
+@import "./tailwind.css";

@@ -1,0 +1,38 @@
+{
+  "Random": {
+    "mean_sinr_db": -21.224889168374567,
+    "mean_throughput_mbps": 54.555042500787984,
+    "mean_pdr": 0.09110505557617357,
+    "mean_latency_ms": 40.18839762484935,
+    "mean_interference": 0.7205708633353063,
+    "spectral_efficiency": 0.09092507083464664,
+    "comm_overhead": 0.0
+  },
+  "Greedy": {
+    "mean_sinr_db": -17.181019927887757,
+    "mean_throughput_mbps": 85.92734255836079,
+    "mean_pdr": 0.1417954489990135,
+    "mean_latency_ms": 38.0707220241027,
+    "mean_interference": 0.5994708028003461,
+    "spectral_efficiency": 0.14321223759726803,
+    "comm_overhead": 0.63
+  },
+  "Round Robin": {
+    "mean_sinr_db": -15.66015452613852,
+    "mean_throughput_mbps": 99.90488610275759,
+    "mean_pdr": 0.16017159209755635,
+    "mean_latency_ms": 36.64232785154977,
+    "mean_interference": 0.7176164850849474,
+    "spectral_efficiency": 0.166508143504596,
+    "comm_overhead": 0.21
+  },
+  "Proposed AI": {
+    "mean_sinr_db": -20.73814054151974,
+    "mean_throughput_mbps": 57.15313759404452,
+    "mean_pdr": 0.09635493904752596,
+    "mean_latency_ms": 40.27100227944783,
+    "mean_interference": 0.777252689372437,
+    "spectral_efficiency": 0.09525522932340755,
+    "comm_overhead": 0.42
+  }
+}

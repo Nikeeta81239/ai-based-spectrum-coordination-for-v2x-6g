@@ -1,0 +1,265 @@
+<routes>
+
+    <!-- ========================================================= -->
+    <!-- VEHICLE TYPES                                             -->
+    <!-- ========================================================= -->
+
+    <!-- Normal passenger car -->
+    <vType id="car"
+           accel="2.6"
+           decel="4.5"
+           sigma="0.5"
+           length="4.5"
+           minGap="2.5"
+           maxSpeed="16.67"
+           speedFactor="1.0"
+           speedDev="0.15"
+           guiShape="passenger"/>
+
+    <!-- Motorcycle -->
+    <vType id="motorcycle"
+           accel="3.5"
+           decel="5.0"
+           sigma="0.7"
+           length="2.0"
+           minGap="1.0"
+           maxSpeed="16.67"
+           speedFactor="1.05"
+           speedDev="0.20"
+           guiShape="motorcycle"/>
+
+    <!-- Bus -->
+    <vType id="bus"
+           accel="1.2"
+           decel="3.0"
+           sigma="0.5"
+           length="12"
+           minGap="3.0"
+           maxSpeed="13.89"
+           speedFactor="0.9"
+           speedDev="0.10"
+           guiShape="bus"/>
+
+    <!-- Truck -->
+    <vType id="truck"
+           accel="1.0"
+           decel="3.0"
+           sigma="0.5"
+           length="12"
+           minGap="3.0"
+           maxSpeed="13.89"
+           speedFactor="0.85"
+           speedDev="0.10"
+           guiShape="truck"/>
+
+
+    <!-- ========================================================= -->
+    <!-- VEHICLES                                                   -->
+    <!-- ========================================================= -->
+
+    <!-- Cars -->
+    <trip id="car_001"
+          type="car"
+          depart="0"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="car_002"
+          type="car"
+          depart="8"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="car_003"
+          type="car"
+          depart="16"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="car_004"
+          type="car"
+          depart="24"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="car_005"
+          type="car"
+          depart="32"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="car_006"
+          type="car"
+          depart="40"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="car_007"
+          type="car"
+          depart="50"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="car_008"
+          type="car"
+          depart="60"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="car_009"
+          type="car"
+          depart="72"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="car_010"
+          type="car"
+          depart="85"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+
+    <!-- ========================================================= -->
+    <!-- MOTORCYCLES                                               -->
+    <!-- ========================================================= -->
+
+    <trip id="bike_001"
+          type="motorcycle"
+          depart="12"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="bike_002"
+          type="motorcycle"
+          depart="28"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="bike_003"
+          type="motorcycle"
+          depart="45"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="bike_004"
+          type="motorcycle"
+          depart="65"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+    <trip id="bike_005"
+          type="motorcycle"
+          depart="90"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="random"/>
+
+
+    <!-- ========================================================= -->
+    <!-- BUSES                                                     -->
+    <!-- ========================================================= -->
+
+    <trip id="bus_001"
+          type="bus"
+          depart="100"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="max"/>
+
+    <trip id="bus_002"
+          type="bus"
+          depart="220"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="max"/>
+
+    <trip id="bus_003"
+          type="bus"
+          depart="360"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="max"/>
+
+
+    <!-- ========================================================= -->
+    <!-- TRUCKS                                                    -->
+    <!-- ========================================================= -->
+
+    <trip id="truck_001"
+          type="truck"
+          depart="130"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="max"/>
+
+    <trip id="truck_002"
+          type="truck"
+          depart="280"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="max"/>
+
+    <trip id="truck_003"
+          type="truck"
+          depart="420"
+          from="1073384217#1"
+          via="25187665#1"
+          to="376978813"
+          departLane="best"
+          departSpeed="max"/>
+
+</routes>

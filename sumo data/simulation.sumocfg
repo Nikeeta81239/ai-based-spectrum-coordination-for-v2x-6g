@@ -1,0 +1,28 @@
+<configuration>
+
+    <input>
+        <net-file value="osm.net.xml"/>
+        <route-files value="routes.rou.xml"/>
+    </input>
+
+    <time>
+        <begin value="0"/>
+        <end value="600"/>
+        <step-length value="1"/>
+    </time>
+
+    <output>
+        <fcd-output value="mobility.xml"/>
+        <fcd-output.geo value="true"/>
+    </output>
+
+    <processing>
+        <ignore-route-errors value="false"/>
+    </processing>
+
+    <report>
+        <verbose value="true"/>
+        <duration-log.statistics value="true"/>
+    </report>
+
+</configuration>
