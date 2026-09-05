@@ -7,48 +7,43 @@ export function ModelArchitectureExplorer() {
   const nodes = [
     {
       id: 'sumo',
-      label: 'SUMO Mobility',
-      desc: 'Silk Board Bengaluru road network vehicle trajectories (speed, position, heading).',
+      label: '1. SUMO Mobility',
+      desc: 'Real microscopic Eclipse SUMO Silk Board road network vehicle trajectories extracted via Python TraCI.',
     },
     {
       id: 'obs',
-      label: 'Vehicle Observation',
-      desc: 'Local observations: RSSI, channel noise floor, neighbor density, app type (URLLC vs eMBB).',
+      label: '2. Local Observation',
+      desc: 'Local vehicle state: velocity, neighbor density, RSSI, and app priority. Exact GPS & VIN kept strictly on-device.',
+    },
+    {
+      id: 'privacy',
+      label: '3. Privacy Gateway',
+      desc: 'Enforces local boundary: masks sensitive identity/coordinates, shares only coarse regional density and compact beacon.',
     },
     {
       id: 'attention',
-      label: 'Multi-Head Attention',
-      desc: '4 Heads: Spatial (neighbors), Temporal (velocity), Application (priority), Frequency (noise).',
+      label: '4. 4-Head Attention',
+      desc: 'Spatial (neighbors), Temporal (acceleration history), Frequency (spectrum noise), and Application (safety/URLLC).',
+    },
+    {
+      id: 'masking',
+      label: '5. Action Masking',
+      desc: 'Pre-decision filter: eliminates channels with severe co-channel interference (>0.75) or unavailable resource blocks.',
     },
     {
       id: 'actor',
-      label: 'Actor Network',
-      desc: 'PyTorch Multi-Agent Actor mapping fused 64-dim embeddings to discrete subchannel & power actions.',
-    },
-    {
-      id: 'action',
-      label: 'Channel Selection',
-      desc: 'Selected subchannel (Ch 1–6) and transmit power (dBm) per vehicle agent.',
-    },
-    {
-      id: 'env',
-      label: 'Environment',
-      desc: '28 GHz mmWave wireless channel simulator updating SINR, PDR, and inter-vehicle interference.',
-    },
-    {
-      id: 'reward',
-      label: 'Reward Function',
-      desc: 'Multi-objective reward: +SINR - Interference - Latency Penalties + Priority Boost.',
+      label: '6. MAPPO Policy',
+      desc: 'Decentralized PPO actor sampling viable subchannels with clipped surrogate objective: min(r_t*A, clip(r_t, 1±eps)*A).',
     },
     {
       id: 'critic',
-      label: 'Local Critic',
-      desc: 'CTDE Dual-Critic: Global Critic for offline joint state training, Local Critic for online local inference.',
+      label: '7. Local Critic',
+      desc: 'Onboard Local Critic estimating V(s, a) with PPO value clipping, guaranteeing decentralized execution without central dependency.',
     },
     {
-      id: 'update',
-      label: 'Model Update',
-      desc: 'Adam optimizer gradient updates (Actor LR 1e-4, Critic LR 1e-3) saving checkpoints to /models/best/.',
+      id: 'wireless',
+      label: '8. 6G Wireless QoS',
+      desc: '28 GHz mmWave wireless channel model computing dynamic SINR, Shannon throughput, PDR, and packet latency.',
     },
   ];
 

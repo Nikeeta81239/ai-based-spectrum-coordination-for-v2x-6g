@@ -14,7 +14,7 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/simulation', label: 'V2X Simulation', icon: PlaySquare },
   { path: '/spectrum', label: 'Spectrum & Privacy', icon: Radio },
-  { path: '/ai-model', label: 'AI Model (MARL)', icon: BrainCircuit },
+  { path: '/ai-model', label: 'AI Model (MAPPO)', icon: BrainCircuit },
   { path: '/explainability', label: 'XAI Explainability', icon: HelpCircle },
   { path: '/results', label: 'Scenarios & Results', icon: Layers },
 ];

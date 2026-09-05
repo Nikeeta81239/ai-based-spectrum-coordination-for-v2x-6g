@@ -149,18 +149,20 @@ export function AIModel() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-xs">
               <div>
-                <label className="text-slate-400 font-bold uppercase text-[10px] block mb-1">Scenario</label>
+                <label className="text-slate-400 font-bold uppercase text-[10px] block mb-1">Scenario / Curriculum</label>
                 <select
                   value={trainScenario}
                   onChange={(e) => setTrainScenario(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-bold"
                 >
-                  <option value="low">Low Density (21 veh)</option>
-                  <option value="medium">Medium Density (50 veh)</option>
-                  <option value="high">High Density (100 veh)</option>
-                  <option value="congestion">Congestion (300 veh)</option>
+                  <option value="curriculum">★ Curriculum (20→50→100→200→300)</option>
+                  <option value="low">Stage 1: Low Density (20 veh)</option>
+                  <option value="medium">Stage 2: Medium Density (50 veh)</option>
+                  <option value="high">Stage 3: High Density (100 veh)</option>
+                  <option value="very_high">Stage 4: Very High Density (200 veh)</option>
+                  <option value="congestion">Stage 5: Congestion (300 veh)</option>
                 </select>
               </div>
 
@@ -176,14 +178,21 @@ export function AIModel() {
                 />
               </div>
 
+              <div>
+                <label className="text-slate-400 font-bold uppercase text-[10px] block mb-1">Action Masking</label>
+                <div className="px-3 py-2 rounded-xl bg-slate-950 border border-emerald-500/40 text-emerald-400 font-bold text-center">
+                  ENABLED (0.75)
+                </div>
+              </div>
+
               <div className="flex items-end">
                 <button
                   onClick={handleStartTraining}
                   disabled={isTraining}
-                  className="w-full py-2.5 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold text-xs uppercase flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold text-xs uppercase flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
-                  {isTraining ? 'Training...' : '1. TRAIN MODEL'}
+                  {isTraining ? 'Training MAPPO...' : '1. TRAIN MAPPO'}
                 </button>
               </div>
 
@@ -194,7 +203,7 @@ export function AIModel() {
                   className="w-full py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold text-xs uppercase flex items-center justify-center gap-2"
                 >
                   <BarChart2 className="w-3.5 h-3.5" />
-                  {isEvaluating ? 'Evaluating...' : '2. EVALUATE VS BASELINES'}
+                  {isEvaluating ? 'Evaluating...' : '2. EVALUATE'}
                 </button>
               </div>
             </div>

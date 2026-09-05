@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<additional>
+    <!--
+      IBLUR JUNCTION (TLS id: 2387385680) - state_len=5
+      Enhanced timing program for corridor RSU 3 area.
+      Activate via TraCI: traci.trafficlight.setProgram("2387385680","enhanced")
+    -->
+    <tlLogic id="2387385680" type="static" programID="enhanced" offset="0">
+        <phase duration="32" state="GGrrG"/>
+        <phase duration="6"  state="yyrrG"/>
+        <phase duration="32" state="rrGGG"/>
+        <phase duration="6"  state="rryyG"/>
+    </tlLogic>
+
+    <!--
+      BELLANDUR JUNCTION - state_len=11
+      Enhanced timing for corridor RSU 4 area.
+      Activate via TraCI: traci.trafficlight.setProgram("cluster_11962404444...","enhanced")
+    -->
+    <tlLogic id="cluster_11962404444_1827247442_1827247449_5774292417_#3more"
+             type="static" programID="enhanced" offset="0">
+        <phase duration="18" state="rrrrgGGgGGg"/>
+        <phase duration="5"  state="rrrrgyyyyyg"/>
+        <phase duration="5"  state="rrrrGrrrrrg"/>
+        <phase duration="5"  state="rrrrGrrrrry"/>
+        <phase duration="20" state="rgGGGGGrrrr"/>
+        <phase duration="5"  state="rgyyyGGrrrr"/>
+        <phase duration="20" state="GGrrrGGrrrr"/>
+        <phase duration="5"  state="yyrrrGGrrrr"/>
+    </tlLogic>
+</additional>

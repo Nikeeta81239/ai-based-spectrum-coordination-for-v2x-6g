@@ -2,10 +2,10 @@ import React from 'react';
 
 export function AttentionHeatmap({ attention = null }) {
   const streams = [
-    { label: 'Spatial Attention', key: 'spatial', color: 'bg-cyan-500', barColor: '#06b6d4' },
-    { label: 'Temporal Attention', key: 'temporal', color: 'bg-purple-500', barColor: '#8b5cf6' },
-    { label: 'Application Attention', key: 'application', color: 'bg-amber-500', barColor: '#f59e0b' },
-    { label: 'Frequency Attention', key: 'frequency', color: 'bg-emerald-500', barColor: '#10b981' },
+    { label: 'Spatial Attention', key: 'Spatial', color: 'bg-cyan-500', barColor: '#06b6d4' },
+    { label: 'Temporal Attention', key: 'Temporal', color: 'bg-purple-500', barColor: '#8b5cf6' },
+    { label: 'Application Attention', key: 'Application', color: 'bg-amber-500', barColor: '#f59e0b' },
+    { label: 'Frequency Attention', key: 'Frequency', color: 'bg-emerald-500', barColor: '#10b981' },
   ];
 
   return (

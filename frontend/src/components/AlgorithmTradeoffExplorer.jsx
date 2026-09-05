@@ -13,8 +13,22 @@ export function AlgorithmTradeoffExplorer({ resultsData = null }) {
     round_robin: { mean_latency_ms: 41.3, mean_pdr: 0.040, mean_sinr_db: -29.7, mean_throughput_mbps: 1.2, mean_interference: 0.74 },
   };
 
-  const dataA = methodsData[algA] || methodsData.proposed;
-  const dataB = methodsData[algB] || methodsData.greedy;
+  const getAlgData = (key) => {
+    if (methodsData[key]) return methodsData[key];
+    const altKeys = {
+      'proposed': 'Proposed AI',
+      'greedy': 'Greedy',
+      'random': 'Random',
+      'round_robin': 'Round Robin'
+    };
+    if (methodsData[altKeys[key]]) return methodsData[altKeys[key]];
+    return methodsData.proposed || methodsData['Proposed AI'] || {
+      mean_latency_ms: 0, mean_pdr: 0, mean_sinr_db: 0, mean_throughput_mbps: 0, mean_interference: 0
+    };
+  };
+
+  const dataA = getAlgData(algA);
+  const dataB = getAlgData(algB);
 
   const getLabel = (k) => (k === 'proposed' ? 'MARL (Ours)' : k.toUpperCase());
 

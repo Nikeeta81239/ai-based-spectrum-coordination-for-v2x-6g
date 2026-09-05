@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-09-05T19:34:51.615415+05:30 by Eclipse SUMO sumo 1.27.1
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\network/network.net.xml"/>
+        <route-files value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\routes/traffic.rou.xml"/>
+        <additional-files value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\additional/additional.add.xml,C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\additional/traffic_lights.add.xml"/>
+    </input>
+
+    <output>
+        <emission-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\output/emission.xml"/>
+        <fcd-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\output/fcd.xml"/>
+        <summary-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\output/summary.xml"/>
+        <tripinfo-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\output/tripinfo.xml"/>
+    </output>
+
+    <time>
+        <begin value="0"/>
+        <end value="3600"/>
+        <step-length value="1.0"/>
+    </time>
+
+    <processing>
+        <ignore-route-errors value="true"/>
+        <collision.action value="warn"/>
+        <time-to-teleport value="180"/>
+    </processing>
+
+    <traci_server>
+        <remote-port value="57929"/>
+    </traci_server>
+
+    <gui_only>
+        <gui-settings-file value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\gui_settings.xml"/>
+        <quit-on-end value="false"/>
+        <start value="true"/>
+    </gui_only>
+
+</sumoConfiguration>
+-->
+
+<emission-export xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/emission_file.xsd">
+    <timestep time="0.00">
+        <vehicle id="0" eclass="HBEFA4/PC_petrol_Euro-4" CO2="2336.31" CO="14.17" HC="0.10" NOx="0.87" PMx="0.49" fuel="757.41" electricity="0.00" noise="66.45" route="!0" type="car" waiting="0.00" lane="-290639790#19_0" pos="4.60" speed="16.67" angle="201.49" x="1714.05" y="8903.67"/>
+    </timestep>
+</emission-export>

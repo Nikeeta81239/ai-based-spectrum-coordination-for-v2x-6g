@@ -22,6 +22,8 @@ class SimulationStartRequest(BaseModel):
     duration_steps: Optional[int] = Field(default=None, ge=10, le=5000)
     speed_multiplier: Optional[float] = Field(default=1.0, ge=0.1, le=10.0)
     ai_mode: Optional[str] = Field(default="marl", description="AI Decision Mode: marl, random, fixed, greedy")
+    use_sumo: Optional[bool] = Field(default=True, description="Use real SUMO/TraCI simulator")
+    gui: Optional[bool] = Field(default=True, description="Open SUMO-GUI window")
 
 
 class SimulationStatusResponse(BaseModel):

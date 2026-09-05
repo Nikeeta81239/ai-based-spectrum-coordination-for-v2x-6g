@@ -4,16 +4,15 @@ import SpectrumChart from '../components/SpectrumChart';
 import StatCard from '../components/StatCard';
 import ChannelConflictGraph from '../components/ChannelConflictGraph';
 import SpectrumDecisionReplay from '../components/SpectrumDecisionReplay';
-import PrivacyInformationFlow from '../components/PrivacyInformationFlow';
-import PrivacyCard from '../components/PrivacyCard';
+import PrivacyAnalysis from '../components/PrivacyAnalysis';
 import { Radio, ShieldCheck, Zap } from 'lucide-react';
 import api from '../api/api';
 import { formatNumber, formatPercent } from '../utils/formatters';
 
 const TABS = [
-  { id: 'monitoring', label: '① Spectrum Monitoring' },
-  { id: 'interference', label: '② Channel & Interference Analysis' },
-  { id: 'privacy', label: '③ Privacy & Local-Critic Analysis' },
+  { id: 'monitoring', label: '① Spectrum Monitor' },
+  { id: 'interference', label: '② Channel Decision' },
+  { id: 'privacy', label: '③ Privacy & Information Flow' },
 ];
 
 export function Spectrum({ simulationState }) {
@@ -93,11 +92,10 @@ export function Spectrum({ simulationState }) {
         </div>
       )}
 
-      {/* ③ PRIVACY & LOCAL-CRITIC ANALYSIS */}
+      {/* ③ PRIVACY ANALYSIS */}
       {activeTab === 'privacy' && (
-        <div className="space-y-6">
-          <PrivacyInformationFlow privacyMetrics={privacyMetrics} />
-          <PrivacyCard privacyMetrics={privacyMetrics} />
+        <div className="mt-6">
+          <PrivacyAnalysis privacyMetrics={privacyMetrics} />
         </div>
       )}
     </div>

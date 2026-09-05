@@ -27,7 +27,7 @@ export function App() {
   } = useSimulation();
 
   return (
-    <Router>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="flex flex-col min-h-screen bg-[#030712] text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950">
         <Navbar isConnected={isConnected} status={status} />
 

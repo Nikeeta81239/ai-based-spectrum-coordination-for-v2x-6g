@@ -1,16 +1,18 @@
 """
-agent.py — Single Vehicle Agent
----------------------------------
+agent.py — Single Vehicle Agent (MAPPO with Action Masking & Local Critic)
+-------------------------------------------------------------------------
 Each vehicle (or RSU) is represented by one Agent instance.
 
 The agent contains:
-  - MultiStreamAttention  -> processes local observations
-  - Actor                 -> selects a spectrum channel
-  - LocalCritic           -> estimates local value (used at deployment)
+  - MultiStreamAttention  -> processes local observations (Spatial, Temporal, Frequency, Application)
+  - Actor                 -> MAPPO policy with Action Masking over spectrum channels
+  - LocalCritic           -> estimates local value V(s, a) (used at deployment for privacy)
 
-During training the GlobalCritic (in multi_agent.py) supervises all agents
-jointly. Each agent's Actor is updated based on the Global Critic's feedback
-plus the entropy bonus.
+MAPPO Features:
+  - Action Masking: Excludes overloaded or severe-interference channels before action selection
+  - Clipped PPO Objective: Prevents large destabilizing policy steps
+  - Local Value Clipping: Stables value function learning
+  - Privacy Preservation: Observation and action decisions occur on-device
 """
 
 import torch
@@ -28,10 +30,15 @@ from training.config                import (
     LEARNING_RATE_CRITIC, ENTROPY_COEF
 )
 
+# MAPPO Hyperparameters
+PPO_CLIP_EPS = 0.2
+VALUE_CLIP_EPS = 0.2
+INTERFERENCE_MASK_THRESHOLD = 0.75  # Channels with > 75% interference are masked
+
 
 class Agent(nn.Module):
     """
-    A single vehicle agent.
+    A single vehicle MAPPO agent.
     """
 
     def __init__(self, agent_id: str, device: torch.device):
@@ -54,13 +61,45 @@ class Agent(nn.Module):
         self.update_count = 0
 
     # ------------------------------------------------------------------
+    def compute_action_mask(self, obs_np: np.ndarray, channel_states: list = None) -> torch.Tensor:
+        """
+        Creates an action mask tensor [1, NUM_CHANNELS] where:
+        True (1) = Channel is viable
+        False (0) = Channel is masked (severe interference > 0.75 or unavailable)
+        """
+        mask = torch.ones(1, NUM_CHANNELS, dtype=torch.bool, device=self.device)
+        if channel_states is not None and len(channel_states) == NUM_CHANNELS:
+            for i, ch in enumerate(channel_states):
+                interf = getattr(ch, "interference", None)
+                avail = getattr(ch, "available", True)
+                if interf is None and isinstance(ch, dict):
+                    interf = ch.get("interference", 0.0)
+                    avail = ch.get("available", True)
+                
+                if (interf is not None and interf > INTERFERENCE_MASK_THRESHOLD) or not avail:
+                    mask[0, i] = False
+        else:
+            # Fallback: extract frequency slice from obs vector
+            # obs: [spatial(4) | temporal(4) | app(4) | freq(NUM_CHANNELS*3)]
+            # freq per channel is [avail, interf, util]
+            start_freq = 4 + 4 + 4
+            if len(obs_np) >= start_freq + NUM_CHANNELS * 3:
+                for i in range(NUM_CHANNELS):
+                    ch_offset = start_freq + i * 3
+                    avail = obs_np[ch_offset] > 0.5
+                    interf = obs_np[ch_offset + 1]
+                    if (interf > INTERFERENCE_MASK_THRESHOLD) or not avail:
+                        mask[0, i] = False
+
+        # Safety check: if all channels are masked, unmask best available channel
+        if not mask.any():
+            mask[0, :] = True
+        return mask
+
+    # ------------------------------------------------------------------
     def observe(self, obs_np: np.ndarray) -> tuple[torch.Tensor, dict]:
         """
         Process a raw observation vector into fused representation + attn_info.
-
-        Returns:
-            fused_repr : (1, ATTENTION_DIM) tensor on self.device
-            attn_info  : dict with attention weights (for XAI)
         """
         obs_t = torch.tensor(obs_np, dtype=torch.float32, device=self.device).unsqueeze(0)
         s, t, a, f = MultiStreamAttention.split_observation(obs_t)
@@ -68,24 +107,35 @@ class Agent(nn.Module):
         return fused, attn_info
 
     # ------------------------------------------------------------------
-    def act(self, obs_np: np.ndarray, deterministic: bool = False) -> tuple[int, torch.Tensor, dict]:
+    def act(
+        self,
+        obs_np: np.ndarray,
+        channel_states: list = None,
+        deterministic: bool = False,
+    ) -> tuple[int, torch.Tensor, dict, float, torch.Tensor]:
         """
-        Given an observation, return a channel action.
-
-        Returns:
-            action      : int  — channel index
-            fused_repr  : tensor (kept for critic update)
+        Given observation, return:
+            action      : int — channel index
+            fused_repr  : tensor
             attn_info   : attention weights dict
+            log_prob    : float — log-prob of taken action
+            action_mask : tensor — mask used
         """
+        action_mask = self.compute_action_mask(obs_np, channel_states)
+
         if deterministic:
             with torch.no_grad():
                 fused, attn_info = self.observe(obs_np)
-                action_t, _, _ = self.actor.get_action(fused, deterministic=True)
-            return int(action_t.item()), fused.detach(), attn_info
+                action_t, log_prob_t, _ = self.actor.get_action(
+                    fused, action_mask=action_mask, deterministic=True
+                )
+            return int(action_t.item()), fused.detach(), attn_info, float(log_prob_t.item()), action_mask
 
         fused, attn_info = self.observe(obs_np)
-        action_t, _, _ = self.actor.get_action(fused, deterministic=False)
-        return int(action_t.item()), fused.detach(), attn_info
+        action_t, log_prob_t, _ = self.actor.get_action(
+            fused, action_mask=action_mask, deterministic=False
+        )
+        return int(action_t.item()), fused.detach(), attn_info, float(log_prob_t.item()), action_mask
 
     # ------------------------------------------------------------------
     def local_critic_value(self, fused_repr: torch.Tensor, action: int) -> float:
@@ -99,16 +149,26 @@ class Agent(nn.Module):
         fused_repr: torch.Tensor,
         action: int,
         target_value: float,
+        old_value: float = None,
     ) -> float:
         """
-        One gradient step on the local critic.
-        target_value = global_reward + gamma * local_next_value  (TD target)
+        One MAPPO PPO-clipped gradient step on the local critic.
         """
         self.critic_opt.zero_grad()
         action_t = torch.tensor([action], dtype=torch.long, device=self.device)
         target_t = torch.tensor([[target_value]], dtype=torch.float32, device=self.device)
-        v        = self.local_critic(fused_repr, action_t)
-        loss     = F.mse_loss(v, target_t)
+        v_pred   = self.local_critic(fused_repr, action_t)
+
+        if old_value is not None:
+            # PPO Value Clipping
+            v_old_t = torch.tensor([[old_value]], dtype=torch.float32, device=self.device)
+            v_clipped = v_old_t + torch.clamp(v_pred - v_old_t, -VALUE_CLIP_EPS, VALUE_CLIP_EPS)
+            loss_unclipped = (v_pred - target_t) ** 2
+            loss_clipped = (v_clipped - target_t) ** 2
+            loss = 0.5 * torch.max(loss_unclipped, loss_clipped).mean()
+        else:
+            loss = F.mse_loss(v_pred, target_t)
+
         loss.backward()
         nn.utils.clip_grad_norm_(self.local_critic.parameters(), 1.0)
         self.critic_opt.step()
@@ -116,28 +176,39 @@ class Agent(nn.Module):
         return float(loss.item())
 
     # ------------------------------------------------------------------
-    def update_actor(
+    def update_actor_mappo(
         self,
         obs_np: np.ndarray,
         action: int,
         advantage: float,
+        old_log_prob: float,
+        action_mask: torch.Tensor = None,
     ) -> float:
         """
-        Policy gradient update using the advantage from the Global Critic.
-        Loss = -log_prob * advantage - entropy_coef * entropy
+        MAPPO Clipped Surrogate Policy Gradient Update:
+        r_t(θ) = π_θ(a_t | s_t) / π_θ_old(a_t | s_t)
+        L_CLIP(θ) = E[ min(r_t(θ) A_t, clip(r_t(θ), 1-ε, 1+ε) A_t) ] + c_2 S[π_θ]
         """
         self.actor_opt.zero_grad()
         obs_t = torch.tensor(obs_np, dtype=torch.float32, device=self.device).unsqueeze(0)
         s, t, a, f = MultiStreamAttention.split_observation(obs_t)
         fused, _   = self.attention(s, t, a, f)
 
-        action_t   = torch.tensor([action], dtype=torch.long, device=self.device)
-        log_prob, entropy = self.actor.log_prob_of(fused, action_t)
-        adv_t      = torch.tensor(advantage, dtype=torch.float32, device=self.device)
+        action_t = torch.tensor([action], dtype=torch.long, device=self.device)
+        mask = action_mask if action_mask is not None else self.compute_action_mask(obs_np)
+        new_log_prob, entropy = self.actor.evaluate_action(fused, action_t, action_mask=mask)
 
-        policy_loss = -(log_prob * adv_t).mean()
+        # Ratio r_t(θ)
+        ratio = torch.exp(new_log_prob - old_log_prob)
+        adv_t = torch.tensor([advantage], dtype=torch.float32, device=self.device)
+
+        # Clipped surrogate objective
+        surr1 = ratio * adv_t
+        surr2 = torch.clamp(ratio, 1.0 - PPO_CLIP_EPS, 1.0 + PPO_CLIP_EPS) * adv_t
+        policy_loss = -torch.min(surr1, surr2).mean()
+
         entropy_loss = -ENTROPY_COEF * entropy
-        loss         = policy_loss + entropy_loss
+        loss = policy_loss + entropy_loss
 
         loss.backward()
         nn.utils.clip_grad_norm_(
@@ -164,9 +235,6 @@ class Agent(nn.Module):
 
     def load(self, path: str):
         ckpt = torch.load(path, map_location=self.device)
-        # Older checkpoints predate stream-level attention gating.  Loading
-        # non-strictly preserves their trained encoder weights while allowing
-        # newly trained checkpoints to include the gate.
         self.attention.load_state_dict(ckpt["attention"], strict=False)
         self.actor.load_state_dict(ckpt["actor"])
         self.local_critic.load_state_dict(ckpt["local_critic"])

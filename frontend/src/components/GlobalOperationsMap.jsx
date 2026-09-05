@@ -1,5 +1,5 @@
 import React from 'react';
-import VehicleMap from './VehicleMap';
+import SumoCanvas from './SumoCanvas';
 import { Globe, Radio, Wifi, Zap } from 'lucide-react';
 
 export function GlobalOperationsMap({ vehicles = [] }) {
@@ -12,7 +12,7 @@ export function GlobalOperationsMap({ vehicles = [] }) {
       <div className="flex justify-between items-center flex-wrap gap-2">
         <h3 className="font-bold text-white text-xs lg:text-sm tracking-wider uppercase font-sans flex items-center gap-2">
           <Globe className="w-4 h-4 text-cyan-400" />
-          GLOBAL OPERATIONS · 6G V2X NETWORK TOPOLOGY
+          SUMO SIMULATION OPERATIONS · 6G V2X NETWORK TOPOLOGY
         </h3>
         <div className="text-xs font-mono text-slate-300 flex items-center gap-2">
           <span className="text-slate-400">Active Connections:</span>
@@ -22,9 +22,9 @@ export function GlobalOperationsMap({ vehicles = [] }) {
         </div>
       </div>
 
-      {/* Live Map with neon border and overlay */}
+      {/* Real SUMO simulation canvas */}
       <div className="rounded-xl overflow-hidden border border-cyan-500/20 shadow-2xl relative">
-        <VehicleMap vehicles={vehicles} />
+        <SumoCanvas vehicles={vehicles} />
       </div>
     </div>
   );

@@ -24,10 +24,10 @@ export function PrivacyInformationFlow({ privacyMetrics = null }) {
         <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 space-y-3 flex flex-col justify-between">
           <div className="space-y-1">
             <div className="text-rose-400 font-bold text-sm uppercase flex items-center gap-2">
-              <Database className="w-4 h-4" /> CENTRALIZED BASELINE
+              <Database className="w-4 h-4" /> Standard Approach (Unsafe)
             </div>
             <p className="text-slate-400 text-[11px]">
-              Continuous transmission of raw vehicle GPS locations, speeds, and full channel states.
+              Cars share their exact location and status constantly with everyone.
             </p>
           </div>
 
@@ -42,10 +42,10 @@ export function PrivacyInformationFlow({ privacyMetrics = null }) {
         <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/20 space-y-3 flex flex-col justify-between">
           <div className="space-y-1">
             <div className="text-emerald-400 font-bold text-sm uppercase flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4" /> DECENTRALIZED LOCAL CRITIC (PROPOSED)
+              <ShieldCheck className="w-4 h-4" /> Our AI Approach (Safe)
             </div>
             <p className="text-slate-400 text-[11px]">
-              Local inference on vehicle hardware using onboard sensors and compact subchannel beacons.
+              Traffic is managed perfectly with local decisions securely inside the car.
             </p>
           </div>
 

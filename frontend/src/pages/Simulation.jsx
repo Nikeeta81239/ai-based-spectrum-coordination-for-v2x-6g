@@ -1,18 +1,24 @@
 import React, { useState } from 'react';
-import SimulationControls from '../components/SimulationControls';
-import VehicleMap from '../components/VehicleMap';
-import VehicleTable from '../components/VehicleTable';
-import ResearchControlsPanel from '../components/ResearchControlsPanel';
-import LiveWhatChangedAlert from '../components/LiveWhatChangedAlert';
-import VehicleDecisionReplay from '../components/VehicleDecisionReplay';
-import StepByStepInspector from '../components/StepByStepInspector';
-import { Activity, Wifi, PlaySquare } from 'lucide-react';
-import { formatNumber, formatPercent } from '../utils/formatters';
+import {
+  Play,
+  Pause,
+  Square,
+  RotateCcw,
+  SkipForward,
+  Activity,
+  Gauge,
+  Cpu,
+  Radio,
+  Clock,
+  ShieldCheck,
+  Layers,
+} from 'lucide-react';
+import { formatNumber, formatPercent, getChannelColor } from '../utils/formatters';
+import { SumoCanvas } from '../components/SumoCanvas';
 
 const TABS = [
-  { id: 'simulation', label: '① SUMO Simulation' },
-  { id: 'decisions', label: '② Step-by-Step Decisions' },
-  { id: 'state', label: '③ Vehicle & Comms State' },
+  { id: 'live', label: '① Live Simulation' },
+  { id: 'decisions', label: '② Vehicle Decisions' },
 ];
 
 export function Simulation({
@@ -29,36 +35,75 @@ export function Simulation({
 }) {
   const {
     vehicles = [],
+    road_lanes = [],
+    traffic_lights = [],
     time_step = 0,
-    metrics = {},
-    live_alert = null,
-    vehicle_decision_histories = {},
-    latest_step_pipeline = null,
-    ai_mode = 'marl',
+    simulation_time = 0.0,
+    sumo_step = 0,
+    sumo_status = 'DISCONNECTED',
+    channels = [],
   } = simulationState;
 
-  const [activeTab, setActiveTab] = useState('simulation');
-  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [activeTab, setActiveTab] = useState('live');
+  const [selectedScenario, setSelectedScenario] = useState('low');
+  const [selectedVehicleId, setSelectedVehicleId] = useState(null);
+  const [guiEnabled, setGuiEnabled] = useState(false);
 
-  const handleRunExperiment = ({ scenario, aiMode, numVehicles }) => {
-    startSimulation(scenario, numVehicles, 600, speed, aiMode);
+  const selectedVehicle = vehicles.find((v) => v.vehicle_id === selectedVehicleId) || vehicles[0] || null;
+
+  const handleStart = () => {
+    startSimulation(selectedScenario, null, 600, speed, 'marl', true, guiEnabled);
+  };
+
+  const getStatusBadge = () => {
+    switch (sumo_status) {
+      case 'CONNECTED':
+        return (
+          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-bold font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            SUMO CONNECTED
+          </span>
+        );
+      case 'STARTING':
+        return (
+          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 text-xs font-bold font-mono">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            STARTING SUMO...
+          </span>
+        );
+      case 'STOPPED':
+        return (
+          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 text-xs font-bold font-mono">
+            <span className="w-2 h-2 rounded-full bg-slate-500" />
+            SUMO STOPPED
+          </span>
+        );
+      default:
+        return (
+          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 text-xs font-bold font-mono">
+            <span className="w-2 h-2 rounded-full bg-rose-400" />
+            SUMO NOT CONNECTED
+          </span>
+        );
+    }
   };
 
   return (
     <div className="space-y-6 font-sans">
-      {/* Header */}
+
+      {/* ── PAGE HEADER ──────────────────────────────────────────── */}
       <div className="flex justify-between items-center flex-wrap gap-4 border-b border-slate-800 pb-4">
         <div>
           <h2 className="text-2xl font-bold text-white tracking-wide flex items-center gap-2">
-            <PlaySquare className="w-6 h-6 text-cyan-400" />
-            SUMO 6G V2X Simulation Center
+            <Radio className="w-6 h-6 text-cyan-400" />
+            V2X Simulation Center
           </h2>
           <p className="text-xs text-slate-400 font-mono mt-1">
-            Microscopic mobility simulation, TraCI channel coordination, MARL research environment & interactive step execution
+            Eclipse SUMO + TraCI · MAPPO Decentralized Agents · 6G Spectrum Coordination
           </p>
         </div>
 
-        {/* 3-Tab Segmented Control */}
+        {/* 2-Tab Segmented Control */}
         <div className="flex items-center rounded-xl bg-slate-900/90 border border-slate-800 p-1 font-mono text-xs gap-1">
           {TABS.map(t => (
             <button
@@ -76,109 +121,409 @@ export function Simulation({
         </div>
       </div>
 
-      {/* ① SUMO SIMULATION */}
-      {activeTab === 'simulation' && (
+      {/* ══════════════════════════════════════════════════════════════
+          TAB ① — LIVE SIMULATION
+          (Control Panel + Canvas + Vehicles Table)
+      ══════════════════════════════════════════════════════════════ */}
+      {activeTab === 'live' && (
         <div className="space-y-6">
-          <ResearchControlsPanel
-            scenario={simulationState.scenario || 'low'}
-            aiMode={ai_mode}
-            numVehicles={vehicles.length || 21}
-            onRunExperiment={handleRunExperiment}
-            status={status}
-          />
-          <SimulationControls
-            status={status}
-            speed={speed}
-            onStart={startSimulation}
-            onPause={pauseSimulation}
-            onResume={resumeSimulation}
-            onStep={stepSimulation}
-            onSpeedChange={setSimulationSpeed}
-            onStop={stopSimulation}
-            onReset={resetSimulation}
-          />
-          <div className="space-y-3">
-            <div className="flex justify-between items-center font-mono text-xs">
-              <span className="text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                <Wifi className="w-3.5 h-3.5 text-cyan-400" /> Bengaluru Silk Board Corridor (Live Mobility)
-              </span>
-              <span className="text-slate-400">Click marker to inspect vehicle agent</span>
-            </div>
-            <VehicleMap vehicles={vehicles} onSelectVehicle={setSelectedVehicle} />
 
-            {selectedVehicle && (
-              <div className="p-4 rounded-2xl border border-cyan-500/40 bg-cyan-950/20 font-mono text-xs flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-cyan-400 animate-ping" />
-                  <div>
-                    <div className="font-bold text-white text-sm">Target Agent: {selectedVehicle.vehicle_id}</div>
-                    <div className="text-slate-400 text-[11px]">App: {selectedVehicle.app_type} | Speed: {selectedVehicle.speed_mps} m/s</div>
-                  </div>
+          {/* Status bar */}
+          <div className="flex items-center gap-6 text-xs font-mono bg-slate-900/50 px-5 py-3 rounded-xl border border-slate-800 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-cyan-400" />
+              <span className="text-slate-400">Time:</span>
+              <strong className="text-white">{(simulation_time || time_step).toFixed(1)}s</strong>
+            </div>
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-purple-400" />
+              <span className="text-slate-400">Step:</span>
+              <strong className="text-white">{sumo_step || time_step}</strong>
+            </div>
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-emerald-400" />
+              <span className="text-slate-400">Live Vehicles:</span>
+              <strong className="text-emerald-400">{vehicles.length}</strong>
+            </div>
+            <div className="ml-auto">{getStatusBadge()}</div>
+          </div>
+
+          {/* Simulation Control */}
+          <div className="p-5 rounded-2xl glass-card border border-cyan-500/30 font-mono space-y-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Play className="w-4 h-4 text-cyan-400" />
+              Simulation Control
+            </h3>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-bold uppercase">Scenario:</span>
+                  <select
+                    value={selectedScenario}
+                    onChange={(e) => setSelectedScenario(e.target.value)}
+                    disabled={status === 'running' || status === 'paused'}
+                    className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                  >
+                    <option value="low">LOW (20 veh)</option>
+                    <option value="medium">MEDIUM (50 veh)</option>
+                    <option value="high">HIGH (100 veh)</option>
+                    <option value="very_high">VERY HIGH (200 veh)</option>
+                    <option value="congestion">CONGESTION (300 veh)</option>
+                  </select>
                 </div>
-                <div className="flex items-center gap-4 text-[11px]">
-                  <div>Channel: <strong className="text-cyan-400">Ch {selectedVehicle.selected_channel + 1}</strong></div>
-                  <div>SINR: <strong className="text-emerald-400">{selectedVehicle.sinr_db} dB</strong></div>
-                  <div>PDR: <strong className="text-purple-400">{formatPercent(selectedVehicle.pdr)}</strong></div>
-                  <div>Throughput: <strong className="text-amber-400">{selectedVehicle.throughput_mbps} Mbps</strong></div>
+
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={guiEnabled}
+                    onChange={(e) => setGuiEnabled(e.target.checked)}
+                    disabled={status === 'running' || status === 'paused'}
+                    className="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer"
+                  />
+                  <span>Open SUMO-GUI Window</span>
+                </label>
+
+                <div className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-700">
+                  <Gauge className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="text-[11px] text-slate-400">Speed:</span>
+                  {[0.5, 1.0, 2.0, 4.0].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setSimulationSpeed && setSimulationSpeed(s)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        speed === s ? 'bg-cyan-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {s}x
+                    </button>
+                  ))}
                 </div>
-                <button
-                  onClick={() => setSelectedVehicle(null)}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
-                >
-                  Clear
+              </div>
+
+              <div className="flex items-center gap-2">
+                {status !== 'running' && status !== 'paused' ? (
+                  <button onClick={handleStart} className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all hover:scale-105 active:scale-95">
+                    <Play className="w-4 h-4 fill-current" /> START
+                  </button>
+                ) : status === 'running' ? (
+                  <>
+                    <button onClick={pauseSimulation} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow transition-all">
+                      <Pause className="w-4 h-4 fill-current" /> PAUSE
+                    </button>
+                    <button onClick={stopSimulation} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow transition-all">
+                      <Square className="w-4 h-4 fill-current" /> STOP
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={resumeSimulation} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow transition-all">
+                      <Play className="w-4 h-4 fill-current" /> RESUME
+                    </button>
+                    <button onClick={stepSimulation} className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-xs border border-cyan-500/40 transition-all">
+                      <SkipForward className="w-4 h-4" /> STEP
+                    </button>
+                    <button onClick={stopSimulation} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow transition-all">
+                      <Square className="w-4 h-4 fill-current" /> STOP
+                    </button>
+                  </>
+                )}
+                <button onClick={resetSimulation} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition-all">
+                  <RotateCcw className="w-3.5 h-3.5" /> RESET
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* SUMO Canvas */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-white font-mono uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-cyan-400" />
+                Live SUMO Simulation — Bengaluru Road Network
+              </span>
+              <span className="text-xs text-cyan-400 font-normal">{vehicles.length} Active Vehicles</span>
+            </h3>
+            <SumoCanvas
+              vehicles={vehicles}
+              roadLanes={road_lanes}
+              trafficLights={traffic_lights}
+              selectedVehicleId={selectedVehicleId}
+              onSelectVehicle={(v) => setSelectedVehicleId(v?.vehicle_id)}
+            />
+          </div>
+
+          {/* Vehicles Table */}
+          <div className="p-5 rounded-2xl glass-card border border-slate-800 space-y-3 font-mono">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Activity className="w-4 h-4 text-cyan-400" />
+                Live SUMO Vehicles (TraCI Source of Truth)
+              </h3>
+              <span className="text-xs text-slate-400">{vehicles.length} vehicles active</span>
+            </div>
+
+            {vehicles.length === 0 ? (
+              <div className="p-12 text-center text-slate-500 space-y-2 border border-dashed border-slate-800 rounded-xl">
+                <Radio className="w-8 h-8 text-slate-600 mx-auto" />
+                <div className="text-sm font-bold text-slate-400">SUMO is not running or no vehicles on network.</div>
+                <div className="text-xs text-slate-500">
+                  Click <strong className="text-cyan-400">START</strong> above to launch SUMO and begin TraCI streaming.
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto rounded-xl border border-slate-800">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-slate-900 text-slate-400 border-b border-slate-800 sticky top-0 z-10">
+                    <tr>
+                      <th className="p-2.5">Vehicle ID</th>
+                      <th className="p-2.5">Speed</th>
+                      <th className="p-2.5">Lane</th>
+                      <th className="p-2.5">Edge</th>
+                      <th className="p-2.5">Neighbors</th>
+                      <th className="p-2.5">Channel</th>
+                      <th className="p-2.5">SINR</th>
+                      <th className="p-2.5">Latency</th>
+                      <th className="p-2.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {vehicles.map((v) => {
+                      const isSelected = selectedVehicle && selectedVehicle.vehicle_id === v.vehicle_id;
+                      return (
+                        <tr
+                          key={v.vehicle_id}
+                          onClick={() => {
+                            setSelectedVehicleId(v.vehicle_id);
+                            setActiveTab('decisions');
+                          }}
+                          className={`transition-colors cursor-pointer hover:bg-slate-800/60 ${
+                            isSelected ? 'bg-cyan-500/10 font-bold border-l-2 border-cyan-400' : ''
+                          }`}
+                        >
+                          <td className="p-2.5 text-cyan-400">{v.vehicle_id}</td>
+                          <td className="p-2.5 text-slate-200">{v.speed_kmh ? `${v.speed_kmh} km/h` : `${v.speed_mps} m/s`}</td>
+                          <td className="p-2.5 text-slate-400 truncate max-w-[100px]" title={v.lane}>{v.lane || 'lane_0'}</td>
+                          <td className="p-2.5 text-slate-400 truncate max-w-[100px]" title={v.edge}>{v.edge || 'silk_board'}</td>
+                          <td className="p-2.5 text-purple-300 font-semibold text-center">{v.num_neighbours}</td>
+                          <td className="p-2.5">
+                            <span className="px-2 py-0.5 rounded text-white text-[11px] font-bold" style={{ backgroundColor: getChannelColor(v.selected_channel) }}>
+                              Ch {v.selected_channel + 1}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-emerald-400 font-semibold">{v.sinr_db} dB</td>
+                          <td className="p-2.5 text-slate-300">{v.latency_ms} ms</td>
+                          <td className="p-2.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              v.pdr >= 0.85 ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' : 'bg-rose-950 text-rose-400 border border-rose-500/40'
+                            }`}>
+                              {v.status || (v.pdr >= 0.85 ? 'Active' : 'Degraded')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {vehicles.length > 0 && (
+              <p className="text-[11px] text-slate-500 text-center font-mono">
+                Click any row to open its AI Decision details in the <span className="text-cyan-400 font-bold">② Vehicle Decisions</span> tab
+              </p>
             )}
           </div>
         </div>
       )}
 
-      {/* ② STEP-BY-STEP DECISIONS */}
+      {/* ══════════════════════════════════════════════════════════════
+          TAB ② — VEHICLE DECISIONS
+          (Inspector + AI Pipeline)
+      ══════════════════════════════════════════════════════════════ */}
       {activeTab === 'decisions' && (
         <div className="space-y-6">
-          <LiveWhatChangedAlert alert={live_alert} />
-          <StepByStepInspector pipeline={latest_step_pipeline} currentStep={time_step} />
-          <VehicleDecisionReplay vehicles={vehicles} histories={vehicle_decision_histories} />
-        </div>
-      )}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start font-mono">
 
-      {/* ③ VEHICLE & COMMS STATE */}
-      {activeTab === 'state' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono">
-            {[
-              { label: 'Throughput', val: `${formatNumber(metrics.mean_throughput_mbps ?? 0, 1)} Mbps`, color: 'text-emerald-400' },
-              { label: 'PDR Reliability', val: formatPercent(metrics.mean_pdr ?? 0), color: 'text-cyan-400' },
-              { label: 'Mean Latency', val: `${formatNumber(metrics.mean_latency_ms ?? 0, 1)} ms`, color: 'text-purple-400' },
-              { label: 'SINR Quality', val: `${formatNumber(metrics.mean_sinr_db ?? 0, 1)} dB`, color: 'text-blue-400' },
-              { label: 'Interference', val: formatNumber(metrics.mean_interference ?? 0, 3), color: 'text-rose-400' },
-              { label: 'Active Agents', val: `${vehicles.length} vehicles`, color: 'text-amber-400' },
-            ].map(({ label, val, color }) => (
-              <div key={label} className="p-3 rounded-xl glass-card border border-cyan-500/20">
-                <div className="text-[10px] text-slate-400 uppercase">{label}</div>
-                <div className={`text-sm font-bold mt-1 ${color}`}>{val}</div>
+            {/* Vehicle Inspector (4 cols) */}
+            <div className="lg:col-span-4 p-5 rounded-2xl glass-card border border-cyan-500/30 space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Cpu className="w-4 h-4 text-cyan-400" />
+                  Vehicle Inspector
+                </h3>
+                {selectedVehicle && (
+                  <span className="text-[10px] bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 font-bold">
+                    {selectedVehicle.vehicle_id}
+                  </span>
+                )}
               </div>
-            ))}
-          </div>
 
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-semibold text-white font-mono uppercase tracking-wider flex items-center gap-2">
-                <Activity className="w-4 h-4 text-cyan-400" />
-                Live Vehicle Telemetry & Attention Weights
-              </h3>
-              <span className="text-xs text-slate-400 font-mono">
-                Showing {vehicles.length} active autonomous agents
-              </span>
+              {selectedVehicle ? (
+                <div className="space-y-3 text-xs">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                      <div className="text-[10px] text-slate-400 uppercase">Speed</div>
+                      <div className="font-bold text-white text-sm mt-0.5">
+                        {selectedVehicle.speed_kmh ? `${selectedVehicle.speed_kmh} km/h` : `${selectedVehicle.speed_mps} m/s`}
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                      <div className="text-[10px] text-slate-400 uppercase">Neighbors</div>
+                      <div className="font-bold text-purple-400 text-sm mt-0.5">{selectedVehicle.num_neighbours} vehicles</div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Subchannel:</span>
+                      <span className="px-2 py-0.5 rounded text-white text-[11px] font-bold" style={{ backgroundColor: getChannelColor(selectedVehicle.selected_channel) }}>
+                        CH{selectedVehicle.selected_channel + 1}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">SINR:</span>
+                      <strong className="text-emerald-400">{selectedVehicle.sinr_db} dB</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Interference:</span>
+                      <strong className="text-rose-400">{formatNumber(selectedVehicle.interference, 3)}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">PDR:</span>
+                      <strong className="text-cyan-400">{formatPercent(selectedVehicle.pdr)}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Latency:</span>
+                      <strong className="text-purple-300">{selectedVehicle.latency_ms} ms</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Throughput:</span>
+                      <strong className="text-amber-300">{selectedVehicle.throughput_mbps} Mbps</strong>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    <span>Exact coordinates kept local. Ephemeral session ID used over air.</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 text-center text-slate-500 text-xs space-y-2">
+                  <p>No vehicle selected.</p>
+                  <button
+                    onClick={() => setActiveTab('live')}
+                    className="text-cyan-400 underline text-xs hover:text-cyan-300"
+                  >
+                    Go to Live Simulation tab and click a vehicle row.
+                  </button>
+                </div>
+              )}
             </div>
-            <VehicleTable
-              vehicles={vehicles}
-              onSelectVehicle={setSelectedVehicle}
-              selectedVehicleId={selectedVehicle?.vehicle_id}
-            />
+
+            {/* AI Decision Pipeline (8 cols) */}
+            <div className="lg:col-span-8 p-6 rounded-2xl glass-card border border-purple-500/30 space-y-5 bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950/20">
+              <div className="flex justify-between items-center flex-wrap gap-2 border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-purple-400" />
+                  AI Spectrum Decision Pipeline
+                </h3>
+                <span className="text-xs font-bold text-cyan-300 bg-cyan-950/60 px-3 py-1 rounded-full border border-cyan-500/30">
+                  {selectedVehicle ? `${selectedVehicle.vehicle_id} — Decision Execution` : 'System Pipeline Overview'}
+                </span>
+              </div>
+
+              {/* 7-Step Pipeline */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-center text-xs">
+                {[
+                  { step: '1. SUMO Obs', label: 'Local Speed & Neighbors', color: 'border-slate-700 bg-slate-900' },
+                  { step: '2. Privacy Gateway', label: 'Local Boundary Filter', color: 'border-emerald-500/40 bg-emerald-950/30' },
+                  { step: '3. 4-Head Attention', label: 'Spatial/Temp/Freq/App', color: 'border-purple-500/40 bg-purple-950/30' },
+                  { step: '4. Action Masking', label: 'Filter Severe Channels', color: 'border-amber-500/40 bg-amber-950/30' },
+                  { step: '5. MAPPO Policy', label: 'Clipped PPO Distribution', color: 'border-cyan-500/40 bg-cyan-950/30' },
+                  { step: '6. Local Critic', label: 'Onboard V(s,a) Estimate', color: 'border-blue-500/40 bg-blue-950/30' },
+                  {
+                    step: '7. Subchannel',
+                    label: selectedVehicle ? `CH${selectedVehicle.selected_channel + 1} Assigned` : 'CH Selected',
+                    color: 'border-emerald-500/40 bg-emerald-950/40',
+                  },
+                ].map((item, idx) => (
+                  <div key={idx} className={`p-3 rounded-xl border ${item.color} flex flex-col justify-between min-h-[90px]`}>
+                    <div className="text-[10px] text-cyan-400 font-bold uppercase">{item.step}</div>
+                    <div className="font-bold text-white text-[11px] mt-1 leading-tight">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Attention + Masking detail */}
+              {selectedVehicle && selectedVehicle.attention && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                  <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
+                    <div className="text-xs font-bold text-slate-300 uppercase flex items-center justify-between">
+                      <span>4-Head Attention Weights</span>
+                      <span className="text-[10px] text-purple-400">Sum = 100%</span>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      {[
+                        { name: 'Spatial (Neighbors & Density)', val: selectedVehicle.attention.spatial || 0.32, color: 'bg-cyan-500' },
+                        { name: 'Temporal (Speed & Accel History)', val: selectedVehicle.attention.temporal || 0.24, color: 'bg-blue-500' },
+                        { name: 'Frequency (Interference & Masking)', val: selectedVehicle.attention.frequency || 0.28, color: 'bg-purple-500' },
+                        { name: 'Application (URLLC / Safety Priority)', val: selectedVehicle.attention.application || 0.16, color: 'bg-emerald-500' },
+                      ].map((att) => (
+                        <div key={att.name} className="space-y-1">
+                          <div className="flex justify-between text-[11px]">
+                            <span className="text-slate-400">{att.name}</span>
+                            <strong className="text-white">{(att.val * 100).toFixed(1)}%</strong>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div className={`h-full ${att.color}`} style={{ width: `${att.val * 100}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
+                    <div className="text-xs font-bold text-slate-300 uppercase flex items-center justify-between">
+                      <span>Action Masking & Subchannel Availability</span>
+                      <span className="text-[10px] text-emerald-400">Pre-Decision Mask</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      {channels.map((ch) => {
+                        const isAssigned = selectedVehicle.selected_channel === ch.channel_id;
+                        const isMasked = ch.is_masked;
+                        return (
+                          <div
+                            key={ch.channel_id}
+                            className={`p-2.5 rounded-xl border text-center ${
+                              isAssigned
+                                ? 'border-cyan-400 bg-cyan-950/60 shadow-md shadow-cyan-500/20'
+                                : isMasked
+                                ? 'border-rose-900/60 bg-rose-950/20 opacity-50'
+                                : 'border-slate-800 bg-slate-950'
+                            }`}
+                          >
+                            <div className="font-bold text-white text-[11px]">Ch {ch.channel_id + 1}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">Interf: {formatNumber(ch.interference, 2)}</div>
+                            <div className="mt-1">
+                              {isAssigned ? (
+                                <span className="px-1.5 py-0.5 rounded bg-cyan-500 text-slate-950 font-bold text-[9px] uppercase">Selected</span>
+                              ) : isMasked ? (
+                                <span className="px-1.5 py-0.5 rounded bg-rose-950 text-rose-400 font-bold text-[9px] uppercase">Masked</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold text-[9px] uppercase">Viable</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

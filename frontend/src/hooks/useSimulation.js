@@ -6,6 +6,8 @@ export function useSimulation() {
     time_step: 0,
     num_vehicles: 0,
     vehicles: [],
+    road_lanes: [],
+    traffic_lights: [],
     channels: [],
     metrics: {},
   });
@@ -89,7 +91,15 @@ export function useSimulation() {
     }
   };
 
-  const startSimulation = async (scenario = 'low', numVehicles = 21, durationSteps = 600, speedMultiplier = 1.0, aiMode = 'marl') => {
+  const startSimulation = async (
+    scenario = 'low',
+    numVehicles = 20,
+    durationSteps = 600,
+    speedMultiplier = 1.0,
+    aiMode = 'marl',
+    useSumo = true,
+    gui = true
+  ) => {
     try {
       const res = await api.startSimulation({
         scenario,
@@ -97,6 +107,8 @@ export function useSimulation() {
         duration_steps: durationSteps,
         speed_multiplier: speedMultiplier,
         ai_mode: aiMode,
+        use_sumo: useSumo,
+        gui: gui,
       });
       setStatus('running');
       return res.data;

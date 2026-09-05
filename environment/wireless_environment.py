@@ -112,7 +112,11 @@ class VehicleWirelessState:
     """
     def __init__(self, vehicle_id: str):
         self.vehicle_id      = vehicle_id
-        self.position        = (0.0, 0.0)
+        self.position        = (0.0, 0.0)  # (lon, lat)
+        self.latitude        = 12.9172
+        self.longitude       = 77.6228
+        self.x               = 0.0
+        self.y               = 0.0
         self.speed_mps       = 0.0
         self.neighbours      = []         # list of neighbour vehicle_ids
         self.num_neighbours  = 0
@@ -320,6 +324,10 @@ class WirelessEnvironment:
 
             vs = VehicleWirelessState(vid)
             vs.position       = all_pos[vid]
+            vs.longitude      = float(all_pos[vid][0])
+            vs.latitude       = float(all_pos[vid][1])
+            vs.x              = float(all_pos[vid][0])
+            vs.y              = float(all_pos[vid][1])
             vs.speed_mps      = speed
             vs.channel_states = list(self.channels)   # shared refs (read-only)
 
@@ -427,6 +435,95 @@ class WirelessEnvironment:
     @property
     def action_dim(self) -> int:
         return NUM_CHANNELS
+
+    def build_states_from_sumo(self, sumo_vehicles: dict) -> dict:
+        """
+        Converts live TraCI SUMO vehicle telemetry into real VehicleWirelessState objects.
+        Connects real SUMO mobility:
+          - Spatial features: real x, y, speed, real SUMO neighbors
+          - Temporal features: real speed and acceleration history
+          - Channel features: real dynamic 28GHz sub-band states
+          - Application features: app priority (safety/URLLC, emergency, traffic, normal)
+        """
+        states = {}
+        t = getattr(self, "current_idx", 0)
+
+        for vid, sdata in sumo_vehicles.items():
+            speed = float(sdata.get("speed_mps", 10.0))
+            x_m = float(sdata.get("x", 0.0))
+            y_m = float(sdata.get("y", 0.0))
+            lat = float(sdata.get("latitude", 12.9172))
+            lon = float(sdata.get("longitude", 77.6228))
+
+            vs = VehicleWirelessState(vid)
+            vs.x = x_m
+            vs.y = y_m
+            vs.latitude = lat
+            vs.longitude = lon
+            vs.position = (lon, lat)  # (lon, lat) used for spatial features
+            vs.speed_mps = speed
+            vs.lane = sdata.get("lane", "lane_0")
+            vs.edge = sdata.get("edge", "edge_silk_board")
+            vs.heading = float(sdata.get("heading", 0.0))
+            vs.vehicle_type = sdata.get("vehicle_type", "car")
+            vs.length = float(sdata.get("length", 4.5))
+            vs.width = float(sdata.get("width", 1.8))
+            vs.waiting_time = float(sdata.get("waiting_time", 0.0))
+            vs.channel_states = list(self.channels)
+
+            neighbors = sdata.get("neighboring_vehicles", [])
+            vs.neighbours = neighbors
+            vs.num_neighbours = len(neighbors)
+            vs.traffic_density = min(vs.num_neighbours / 20.0, 1.0) * getattr(self, "density_factor", 1.0)
+
+            # Wireless link metrics to nearest real SUMO neighbor
+            if neighbors:
+                min_dist = COMM_RANGE_M
+                x1, y1 = vs.position
+                for other_id in neighbors:
+                    other_sdata = sumo_vehicles.get(other_id)
+                    if other_sdata:
+                        x2, y2 = float(other_sdata.get("x", 0.0)), float(other_sdata.get("y", 0.0))
+                        d = math.hypot(x1 - x2, y1 - y2)
+                        if d < min_dist:
+                            min_dist = max(REFERENCE_DIST_M, d)
+
+                prev = self._prev_states.get(vid)
+                ch_idx = prev.assigned_channel if prev else 0
+                interf = self.channels[ch_idx].interference
+                vs.rssi_dbm = rssi_dbm(min_dist)
+                vs.sinr_db = sinr_db(vs.rssi_dbm, interf)
+                vs.pdr = pdr_from_sinr(vs.sinr_db)
+                vs.throughput_mbps = throughput_mbps(vs.sinr_db)
+                vs.latency_ms = latency_ms(min_dist, vs.sinr_db)
+            else:
+                vs.rssi_dbm = -95.0
+                vs.sinr_db = -5.0
+                vs.pdr = 0.1
+                vs.throughput_mbps = 1.0
+                vs.latency_ms = 100.0
+
+            # App type based on SUMO vehicle type
+            vtype = sdata.get("vehicle_type", "car")
+            vs.app_type = _assign_app_type(vtype, t)
+            vs.app_priority = APP_PRIORITY[vs.app_type]
+
+            # Temporal history from real SUMO speeds
+            prev = self._prev_states.get(vid)
+            if prev:
+                vs.prev_speed = prev.speed_mps
+                vs.prev_interference = (
+                    prev.channel_states[prev.assigned_channel].interference
+                    if prev.channel_states else 0.0
+                )
+            else:
+                vs.prev_speed = speed
+                vs.prev_interference = 0.1
+
+            states[vid] = vs
+
+        self._prev_states = dict(states)
+        return states
 
 
 # ─────────────────────────────────────────────────────────────────────────────

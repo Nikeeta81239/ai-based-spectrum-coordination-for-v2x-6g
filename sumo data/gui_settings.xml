@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  gui_settings.xml  —  Phase 4: SUMO-GUI viewport and visualization settings
+  Corridor: Silk Board -> Agara -> Iblur -> Bellandur -> Marathahalli
+-->
+<viewsettings>
+
+    <!-- Viewport centered on the study corridor midpoint (approx Iblur) -->
+    <viewport x="5500" y="9000" zoom="120"/>
+
+    <!-- Simulation delay for visual inspection -->
+    <delay value="50"/>
+
+    <!-- ── Edge / Road rendering ─────────────────────────────────── -->
+    <edges>
+        <coloring scheme="by type"/>
+        <showLaneChangePreference value="0"/>
+        <showBlinker value="1"/>
+    </edges>
+
+    <!-- ── Vehicle rendering ─────────────────────────────────────── -->
+    <vehicles>
+        <!--
+          Color by type matches vType color attributes:
+            car       = cyan   (0,255,255)
+            motorcycle= yellow (255,255,0)
+            bus       = orange (255,140,0)
+            truck     = blue   (30,144,255)
+            emergency = red    (255,0,0)
+        -->
+        <coloring scheme="by type"/>
+        <minSize value="4" exaggeration="4"/>
+        <showBlinker value="1"/>
+        <drawLaneChangePreference value="0"/>
+        <showMinGap value="0"/>
+        <showBThetaGap value="0"/>
+        <showRouteIndex value="0"/>
+        <drawReversed value="0"/>
+        <showParkingInfo value="0"/>
+    </vehicles>
+
+    <!-- ── Junctions / Intersections ─────────────────────────────── -->
+    <junctions>
+        <coloring scheme="uniform"/>
+        <drawShape value="1"/>
+        <drawCrossingsAndWalkingareas value="1"/>
+    </junctions>
+
+    <!-- ── Additional objects (RSU POIs) ─────────────────────────── -->
+    <pois>
+        <size value="10" exaggeration="3"/>
+        <color value="255,0,255"/>
+    </pois>
+
+    <!-- ── Traffic lights ─────────────────────────────────────────── -->
+    <tls-phase-vehicle-count value="0"/>
+    <link-junction-index value="0"/>
+    <link-tls-index value="0"/>
+    <tls-phase-id value="0"/>
+
+    <!-- ── Background / grid ──────────────────────────────────────── -->
+    <background>
+        <colorScheme name="default">
+            <entry color="80,80,80"/>
+        </colorScheme>
+    </background>
+
+    <!-- ── Legend ────────────────────────────────────────────────── -->
+    <legend show="1"/>
+
+</viewsettings>

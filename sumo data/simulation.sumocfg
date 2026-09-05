@@ -1,28 +1,35 @@
-<configuration>
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
 
     <input>
-        <net-file value="osm.net.xml"/>
-        <route-files value="routes.rou.xml"/>
+        <net-file value="network/network.net.xml"/>
+        <route-files value="routes/traffic.rou.xml"/>
+        <additional-files value="additional/additional.add.xml,additional/traffic_lights.add.xml"/>
     </input>
 
     <time>
         <begin value="0"/>
-        <end value="600"/>
-        <step-length value="1"/>
+        <end value="3600"/>
+        <step-length value="1.0"/>
     </time>
 
     <output>
-        <fcd-output value="mobility.xml"/>
-        <fcd-output.geo value="true"/>
+        <tripinfo-output value="output/tripinfo.xml"/>
+        <fcd-output value="output/fcd.xml"/>
+        <emission-output value="output/emission.xml"/>
+        <summary-output value="output/summary.xml"/>
     </output>
 
     <processing>
-        <ignore-route-errors value="false"/>
+        <ignore-route-errors value="true"/>
+        <collision.action value="warn"/>
+        <time-to-teleport value="180"/>
     </processing>
 
-    <report>
-        <verbose value="true"/>
-        <duration-log.statistics value="true"/>
-    </report>
+    <gui_only>
+        <gui-settings-file value="gui_settings.xml"/>
+        <start value="true"/>
+        <quit-on-end value="false"/>
+    </gui_only>
 
 </configuration>

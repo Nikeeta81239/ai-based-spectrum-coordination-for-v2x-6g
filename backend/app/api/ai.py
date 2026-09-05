@@ -48,7 +48,8 @@ def _run_training(scenario: str, episodes: int):
     _training_state["status"] = "running"
     _training_state["episode"] = 0
     _training_state["total_episodes"] = episodes
-    _training_state["message"] = f"Training in progress ({scenario} scenario, {episodes} episodes)..."
+    use_curr = (scenario.lower() == "curriculum")
+    _training_state["message"] = f"MAPPO Training in progress ({'Curriculum 20->300' if use_curr else scenario}, {episodes} episodes)..."
 
     if _project_root not in sys.path:
         sys.path.insert(0, _project_root)
@@ -57,14 +58,14 @@ def _run_training(scenario: str, episodes: int):
         import training.config as cfg
         cfg.NUM_EPISODES = episodes
         from training.train import train
-        metrics = train(scenario=scenario)
+        metrics = train(scenario=scenario if not use_curr else "low", use_curriculum=use_curr)
         if metrics:
             _training_state["best_reward"]  = max(m["mean_reward"] for m in metrics)
             _training_state["final_reward"] = metrics[-1]["mean_reward"]
             _training_state["episode"]      = len(metrics)
         _training_state["status"]  = "done"
-        _training_state["message"] = f"Training successfully completed ({episodes} episodes)."
-        logger.info("[AI] Training completed.")
+        _training_state["message"] = f"MAPPO Training successfully completed ({len(metrics) if metrics else episodes} episodes)."
+        logger.info("[AI] MAPPO Training completed.")
     except Exception as exc:
         _training_state["status"]  = "failed"
         _training_state["message"] = f"Training error: {exc}"

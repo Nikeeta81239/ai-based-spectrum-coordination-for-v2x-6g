@@ -1,0 +1,8 @@
+﻿<additional>
+    <!-- RSU Definitions along the Silk Board -> Agara -> Iblur -> Bellandur -> Marathahalli corridor -->
+    <poi id="RSU_Silk_Board" type="RSU" color="magenta" x="2473.2" y="7760.0" layer="100" width="15" height="15"/>
+    <poi id="RSU_Agara" type="RSU" color="magenta" x="4416.8" y="8763.0" layer="100" width="15" height="15"/>
+    <poi id="RSU_Iblur" type="RSU" color="magenta" x="5846.0" y="9145.0" layer="100" width="15" height="15"/>
+    <poi id="RSU_Bellandur" type="RSU" color="magenta" x="7857.4" y="9292.1" layer="100" width="15" height="15"/>
+    <poi id="RSU_Marathahalli" type="RSU" color="magenta" x="9655.1" y="12040.2" layer="100" width="15" height="15"/>
+</additional>

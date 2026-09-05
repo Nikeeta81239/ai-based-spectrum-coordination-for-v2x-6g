@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="../network/network.net.xml"/>
+        <route-files value="../routes/scenario_midday.rou.xml"/>
+        <additional-files value="../additional/additional.add.xml,../additional/traffic_lights.add.xml"/>
+    </input>
+
+    <time>
+        <begin value="0"/>
+        <end value="3600"/>
+        <step-length value="1.0"/>
+    </time>
+
+    <output>
+        <tripinfo-output value="../output/scenario_midday_tripinfo.xml"/>
+        <fcd-output value="../output/scenario_midday_fcd.xml"/>
+        <summary-output value="../output/scenario_midday_summary.xml"/>
+    </output>
+
+    <processing>
+        <ignore-route-errors value="true"/>
+        <collision.action value="warn"/>
+        <time-to-teleport value="300"/>
+    </processing>
+
+    <gui_only>
+        <gui-settings-file value="../gui_settings.xml"/>
+        <start value="true"/>
+        <quit-on-end value="false"/>
+    </gui_only>
+
+</configuration>

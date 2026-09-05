@@ -1,20 +1,16 @@
 """
-train.py — Training Loop
---------------------------
-Trains the Multi-Agent Attention-DRL system.
-
-Pipeline per episode:
-  1. Reset WirelessEnvironment
-  2. For each time step:
-       a. Get states from environment
-       b. Collect actions from all agents (via MultiAgentSystem)
-       c. Step the environment → next_states, rewards
-       d. Update Global Critic + all Actor/LocalCritic networks
-       e. Log metrics
-  3. Save model checkpoints
+train.py — Training Loop with MAPPO and Curriculum Learning
+-----------------------------------------------------------
+Trains the Multi-Agent Attention-DRL system using:
+  - MAPPO (Multi-Agent Proximal Policy Optimization)
+  - Action Masking (interference-filtered channel space)
+  - Curriculum Learning: 20 -> 50 -> 100 -> 200 -> Congestion
+  - Privacy-preserving Local Critic supervision
 
 Run:
     python training/train.py
+    python training/train.py --curriculum
+    python training/train.py --scenario high
 """
 
 import sys, os
@@ -27,42 +23,49 @@ import torch
 
 from environment.wireless_environment import WirelessEnvironment
 from agents.multi_agent               import MultiAgentSystem
+from training.curriculum              import CurriculumManager
 from training.config import (
     MOBILITY_CSV, NUM_EPISODES, GAMMA, MODEL_SAVE_DIR,
     LOGS_DIR, METRICS_DIR, DEFAULT_SCENARIO, TRAFFIC_SCENARIOS,
     UPDATE_EVERY_N_STEPS
 )
 
+
 # ─────────────────────────────────────────────────────────────────────────────
-def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None):
-    # ── Setup ──
-    device     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"\n{'='*60}")
-    print(f"  AI-Based Spectrum Coordination — Training")
-    print(f"  Device  : {device}")
-    print(f"  Scenario: {scenario}")
-    print(f"{'='*60}\n")
+def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None, use_curriculum: bool = False):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"\n{'='*65}")
+    print(f"  AI-Based Spectrum Coordination — MAPPO Training Pipeline")
+    print(f"  Algorithm : MAPPO (Multi-Agent PPO) + 4-Head Attention + Local Critic")
+    print(f"  Masking   : Action Masking Active (Interference Threshold: 0.75)")
+    print(f"  Curriculum: {'ENABLED (20 -> 50 -> 100 -> 200 -> 300)' if use_curriculum else 'OFF (' + scenario + ')'}")
+    print(f"  Device    : {device}")
+    print(f"{'='*65}\n")
 
     csv = csv_path or MOBILITY_CSV
     if not os.path.exists(csv):
         print(f"[Train] ERROR: {csv} not found.")
-        print("  Copy your v2x_dataset.csv to data/raw/v2x_dataset.csv")
         return
 
-    density = TRAFFIC_SCENARIOS.get(scenario, {}).get("density_factor", 1.0)
-    env     = WirelessEnvironment(csv, scenario_density_factor=density)
-    mas     = MultiAgentSystem(device)
+    curriculum = CurriculumManager() if use_curriculum else None
+    active_scenario = curriculum.scenario_name if use_curriculum else scenario
+    density = curriculum.density_factor if use_curriculum else TRAFFIC_SCENARIOS.get(active_scenario, {}).get("density_factor", 1.0)
+    max_veh = curriculum.num_vehicles if use_curriculum else TRAFFIC_SCENARIOS.get(active_scenario, {}).get("num_vehicles", 21)
+
+    env = WirelessEnvironment(csv, scenario_density_factor=density, max_vehicles=max_veh)
+    mas = MultiAgentSystem(device)
 
     os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
     os.makedirs(LOGS_DIR,       exist_ok=True)
     os.makedirs(METRICS_DIR,    exist_ok=True)
 
-    # ── Training Loop ──
-    episode_rewards   = []
-    episode_metrics   = []
-    best_reward       = -np.inf
+    episode_rewards = []
+    episode_metrics = []
+    best_reward     = -np.inf
 
-    for episode in range(1, NUM_EPISODES + 1):
+    episodes_to_run = sum(s["episodes"] for s in curriculum.STAGES) if use_curriculum else NUM_EPISODES
+
+    for episode in range(1, episodes_to_run + 1):
         states     = env.reset()
         ep_rewards = []
         ep_losses  = {"actor": [], "critic": [], "global_critic": []}
@@ -76,13 +79,13 @@ def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None):
         step = 0
 
         while not done:
-            # ── Agent step ──
+            # Step actions with Action Masking
             actions, fused_reprs, attn_infos = mas.step_actions(states)
 
-            # ── Environment step ──
+            # Step wireless environment
             next_states, rewards, done, info = env.step(actions)
 
-            # ── Update networks (every N steps for speed) ──
+            # Periodic MAPPO update
             if next_states and (step % UPDATE_EVERY_N_STEPS == 0):
                 losses = mas.update(states, actions, rewards, next_states)
                 if losses:
@@ -90,7 +93,6 @@ def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None):
                     ep_losses["critic"].append(losses.get("critic_loss", 0))
                     ep_losses["global_critic"].append(losses.get("global_critic_loss", 0))
 
-            # ── Collect step metrics ──
             for vid, vs in states.items():
                 ep_rewards.append(rewards.get(vid, 0))
                 ep_sinr.append(vs.sinr_db)
@@ -101,19 +103,20 @@ def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None):
                 ep_interf.append(vs.channel_states[ch].interference)
 
             states = next_states
-            step  += 1
+            step += 1
 
-
-        # ── Episode Summary ──
         mean_rw  = float(np.mean(ep_rewards)) if ep_rewards else 0.0
+        mean_pdr_val = float(np.mean(ep_pdr)) if ep_pdr else 0.0
         episode_rewards.append(mean_rw)
 
         ep_metric = {
             "episode":         episode,
+            "scenario":        curriculum.scenario_name if use_curriculum else active_scenario,
+            "curriculum_stage": curriculum.stage_number if use_curriculum else 1,
             "mean_reward":     mean_rw,
             "mean_sinr_db":    float(np.mean(ep_sinr))    if ep_sinr    else 0,
             "mean_throughput": float(np.mean(ep_tput))    if ep_tput    else 0,
-            "mean_pdr":        float(np.mean(ep_pdr))     if ep_pdr     else 0,
+            "mean_pdr":        mean_pdr_val,
             "mean_latency_ms": float(np.mean(ep_latency)) if ep_latency else 0,
             "mean_interf":     float(np.mean(ep_interf))  if ep_interf  else 0,
             "actor_loss":      float(np.mean(ep_losses["actor"]))        if ep_losses["actor"]        else 0,
@@ -122,10 +125,19 @@ def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None):
         }
         episode_metrics.append(ep_metric)
 
-        # ── Print progress ──
-        if episode % 10 == 0 or episode == 1:
+        # Handle Curriculum Progression
+        if use_curriculum:
+            advanced, msg = curriculum.record_episode(mean_pdr_val, mean_rw)
+            if advanced:
+                print(f"\n{'*'*60}\n  {msg}\n{'*'*60}\n")
+                density = curriculum.density_factor
+                max_veh = curriculum.num_vehicles
+                env = WirelessEnvironment(csv, scenario_density_factor=density, max_vehicles=max_veh)
+
+        if episode % 5 == 0 or episode == 1:
+            stage_str = f" [Stage {curriculum.stage_number}: {curriculum.scenario_name}]" if use_curriculum else ""
             print(
-                f"  Ep {episode:4d}/{NUM_EPISODES} | "
+                f"  Ep {episode:4d}/{episodes_to_run}{stage_str} | "
                 f"Reward: {mean_rw:+7.3f} | "
                 f"SINR: {ep_metric['mean_sinr_db']:5.1f} dB | "
                 f"PDR: {ep_metric['mean_pdr']:.3f} | "
@@ -133,21 +145,18 @@ def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None):
                 f"Agents: {len(mas.agents)}"
             )
 
-        # ── Save best model ──
         if mean_rw > best_reward:
             best_reward = mean_rw
             mas.save_all(os.path.join(MODEL_SAVE_DIR, "best"))
 
-        # ── Periodic checkpoint ──
-        if episode % 100 == 0:
+        if episode % 50 == 0:
             mas.save_all(os.path.join(MODEL_SAVE_DIR, f"ep{episode}"))
 
-    # ── Save logs ──
     with open(os.path.join(METRICS_DIR, "training_metrics.json"), "w") as f:
         json.dump(episode_metrics, f, indent=2)
 
-    print(f"\n[Train] Training complete. Best reward: {best_reward:.3f}")
-    print(f"[Train] Metrics saved → {METRICS_DIR}training_metrics.json")
+    print(f"\n[Train] Training complete. Best MAPPO reward: {best_reward:.3f}")
+    print(f"[Train] Metrics saved -> {METRICS_DIR}training_metrics.json")
     return episode_metrics
 
 
@@ -157,6 +166,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--scenario", default=DEFAULT_SCENARIO,
                         choices=list(TRAFFIC_SCENARIOS.keys()))
+    parser.add_argument("--curriculum", action="store_true", help="Enable Curriculum Learning (20->50->100->200->300)")
     parser.add_argument("--csv", default=None, help="Path to v2x_dataset.csv")
     args = parser.parse_args()
-    train(scenario=args.scenario, csv_path=args.csv)
+    train(scenario=args.scenario, csv_path=args.csv, use_curriculum=args.curriculum)

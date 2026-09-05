@@ -18,30 +18,32 @@ export function VehicleMap({ vehicles = [], onSelectVehicle }) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {vehicles.map((v) => (
-          <CircleMarker
-            key={v.vehicle_id}
-            center={[v.latitude, v.longitude]}
-            radius={7}
-            pathOptions={{
-              color: getChannelColor(v.selected_channel),
-              fillColor: getChannelColor(v.selected_channel),
-              fillOpacity: 0.8,
-            }}
-            eventHandlers={{
-              click: () => onSelectVehicle && onSelectVehicle(v),
-            }}
-          >
-            <Popup className="font-mono text-xs">
-              <div className="p-1 space-y-1">
-                <div className="font-bold text-slate-900">{v.vehicle_id}</div>
-                <div>Speed: {v.speed_mps} m/s</div>
-                <div>Channel: Ch {v.selected_channel + 1}</div>
-                <div>SINR: {v.sinr_db} dB</div>
-              </div>
-            </Popup>
-          </CircleMarker>
-        ))}
+        {vehicles
+          .filter((v) => typeof v.latitude === 'number' && !isNaN(v.latitude) && typeof v.longitude === 'number' && !isNaN(v.longitude))
+          .map((v) => (
+            <CircleMarker
+              key={v.vehicle_id}
+              center={[v.latitude, v.longitude]}
+              radius={7}
+              pathOptions={{
+                color: getChannelColor(v.selected_channel),
+                fillColor: getChannelColor(v.selected_channel),
+                fillOpacity: 0.8,
+              }}
+              eventHandlers={{
+                click: () => onSelectVehicle && onSelectVehicle(v),
+              }}
+            >
+              <Popup className="font-mono text-xs">
+                <div className="p-1 space-y-1">
+                  <div className="font-bold text-slate-900">{v.vehicle_id}</div>
+                  <div>Speed: {v.speed_mps} m/s</div>
+                  <div>Channel: Ch {v.selected_channel + 1}</div>
+                  <div>SINR: {v.sinr_db} dB</div>
+                </div>
+              </Popup>
+            </CircleMarker>
+          ))}
       </MapContainer>
     </div>
   );

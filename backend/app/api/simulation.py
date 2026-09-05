@@ -60,6 +60,8 @@ async def start_simulation(
             speed_multiplier=req.speed_multiplier or 1.0,
             run_id=run_id,
             ai_mode=req.ai_mode or "marl",
+            use_sumo=req.use_sumo if req.use_sumo is not None else True,
+            gui=req.gui if req.gui is not None else True,
         )
         return {
             "status": "running",

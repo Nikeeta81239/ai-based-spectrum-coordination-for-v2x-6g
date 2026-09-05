@@ -1,15 +1,14 @@
 """
-multi_agent.py — Multi-Agent Manager
---------------------------------------
-Manages the pool of vehicle agents and the shared Global Critic.
+multi_agent.py — Multi-Agent MAPPO Controller
+----------------------------------------------
+Manages the decentralized pool of vehicle MAPPO agents and the shared Global Critic.
 
 Responsibilities:
-  1. Create/destroy agents as vehicles appear/disappear
-  2. Collect joint actions from all agents
-  3. Run the Global Critic on the joint state
-  4. Compute advantages
-  5. Dispatch actor and local-critic updates to each agent
-  6. Centralised-Training / Decentralised-Execution (CTDE)
+  1. Dynamically create/destroy agents as vehicles enter/leave SUMO / environment
+  2. Collect joint actions with Action Masking and old log-probabilities
+  3. Execute MAPPO policy gradient updates with PPO clipped objective
+  4. Perform Local-Critic value updates with PPO value clipping
+  5. CTDE (Centralized Training with Decentralized Execution & Local Critic)
 """
 
 import torch
@@ -31,12 +30,7 @@ logger = logging.getLogger(__name__)
 
 class MultiAgentSystem:
     """
-    Central controller for all vehicle agents.
-
-    Usage:
-        mas = MultiAgentSystem(device)
-        actions, fused_reprs, attn_infos = mas.step_actions(states)
-        mas.update(states, actions, rewards, next_states)
+    Central coordinator for decentralized MAPPO vehicle agents.
     """
 
     def __init__(self, device: torch.device):
@@ -48,10 +42,14 @@ class MultiAgentSystem:
             self.global_critic.parameters(), lr=LEARNING_RATE_CRITIC
         )
 
-        # Episode-level memory (for a simple one-step update)
-        self._last_fused:   dict[str, torch.Tensor] = {}
-        self._last_actions: dict[str, int] = {}
-        self._last_obs:     dict[str, np.ndarray] = {}
+        # Rollout caching for MAPPO updates
+        self._last_fused:       dict[str, torch.Tensor] = {}
+        self._last_actions:     dict[str, int] = {}
+        self._last_obs:         dict[str, np.ndarray] = {}
+        self._last_log_probs:   dict[str, float] = {}
+        self._last_masks:       dict[str, torch.Tensor] = {}
+        self._last_values:      dict[str, float] = {}
+
         self._checkpoint_dir: str | None = None
 
     # ------------------------------------------------------------------
@@ -77,11 +75,11 @@ class MultiAgentSystem:
     # ------------------------------------------------------------------
     def step_actions(
         self,
-        states: dict,   # {vehicle_id -> VehicleWirelessState}
+        states: dict,   # {vehicle_id -> VehicleWirelessState or dict}
         deterministic: bool = False,
     ) -> tuple[dict, dict, dict]:
         """
-        Get channel actions for all vehicles.
+        Get channel actions for all vehicles with Action Masking.
 
         Returns:
             actions      : {vehicle_id -> channel_int}
@@ -90,21 +88,39 @@ class MultiAgentSystem:
         """
         self._ensure_agents(list(states.keys()))
         actions, fused_reprs, attn_infos = {}, {}, {}
+        log_probs, masks, values = {}, {}, {}
 
         for vid, vs in states.items():
             if deterministic:
                 self.agents[vid].eval()
             else:
                 self.agents[vid].train()
-            obs_np           = vs.get_full_observation()
-            action, fused, attn = self.agents[vid].act(obs_np, deterministic)
+
+            # Handle both VehicleWirelessState objects and dicts
+            obs_np = vs.get_full_observation() if hasattr(vs, "get_full_observation") else vs.get("observation", np.zeros(26))
+            ch_states = getattr(vs, "channel_states", None)
+
+            action, fused, attn, log_prob, mask = self.agents[vid].act(
+                obs_np, channel_states=ch_states, deterministic=deterministic
+            )
+            val = self.agents[vid].local_critic_value(fused, action)
+
             actions[vid]     = action
             fused_reprs[vid] = fused
             attn_infos[vid]  = attn
+            log_probs[vid]   = log_prob
+            masks[vid]       = mask
+            values[vid]      = val
 
-        self._last_fused   = fused_reprs
-        self._last_actions = actions
-        self._last_obs     = {vid: vs.get_full_observation() for vid, vs in states.items()}
+        self._last_fused     = fused_reprs
+        self._last_actions   = actions
+        self._last_log_probs = log_probs
+        self._last_masks     = masks
+        self._last_values    = values
+        self._last_obs       = {
+            vid: (vs.get_full_observation() if hasattr(vs, "get_full_observation") else vs.get("observation", np.zeros(26)))
+            for vid, vs in states.items()
+        }
         return actions, fused_reprs, attn_infos
 
     # ------------------------------------------------------------------
@@ -116,7 +132,7 @@ class MultiAgentSystem:
         next_states: dict,
     ) -> dict:
         """
-        One update step for all actors + critics.
+        One MAPPO PPO update step for all agents + critics.
 
         Returns:
             metrics: dict with losses and mean reward
@@ -142,8 +158,10 @@ class MultiAgentSystem:
             next_action_list = []
             for vid in vehicle_ids:
                 if vid in next_states:
-                    obs_np = next_states[vid].get_full_observation()
-                    act, fused, _ = self.agents[vid].act(obs_np, deterministic=True)
+                    n_vs = next_states[vid]
+                    obs_np = n_vs.get_full_observation() if hasattr(n_vs, "get_full_observation") else n_vs.get("observation", np.zeros(26))
+                    ch_states = getattr(n_vs, "channel_states", None)
+                    act, fused, _, _, _ = self.agents[vid].act(obs_np, channel_states=ch_states, deterministic=True)
                     next_fused_list.append(fused)
                     next_action_list.append(act)
                 else:
@@ -164,7 +182,7 @@ class MultiAgentSystem:
         self.gc_opt.step()
         self.global_critic.soft_update()
 
-        # -- 5. Compute advantages & update each agent --
+        # -- 5. Compute advantages & update each MAPPO agent --
         actor_losses  = []
         critic_losses = []
 
@@ -176,11 +194,15 @@ class MultiAgentSystem:
             act      = actions.get(vid, 0)
             rw       = rewards.get(vid, 0.0)
             fused    = self._last_fused.get(vid, self._zero_repr())
+            old_logp = self._last_log_probs.get(vid, 0.0)
+            old_val  = self._last_values.get(vid, 0.0)
+            mask     = self._last_masks.get(vid, None)
 
-            # Local next-value for advantage
+            # Local next-value for GAE/TD target
             if vid in next_states:
-                next_obs = next_states[vid].get_full_observation()
-                _, next_fused, _ = agent.act(next_obs, deterministic=True)
+                n_vs = next_states[vid]
+                next_obs = n_vs.get_full_observation() if hasattr(n_vs, "get_full_observation") else n_vs.get("observation", np.zeros(26))
+                _, next_fused, _, _, _ = agent.act(next_obs, deterministic=True)
             else:
                 next_fused = self._zero_repr()
 
@@ -189,19 +211,25 @@ class MultiAgentSystem:
                 next_val = agent.local_critic.target_forward(next_fused, next_action_t_local)
             td_local = rw + GAMMA * float(next_val.item())
 
-            # Update local critic
-            cl = agent.update_local_critic(fused, act, td_local)
+            # Update local critic with PPO value clipping
+            cl = agent.update_local_critic(fused, act, td_local, old_value=old_val)
             critic_losses.append(cl)
 
-            # Advantage = TD target − V(s)
+            # Advantage = TD target − V(s, a)
             act_t = torch.tensor([act], dtype=torch.long, device=self.device)
             with torch.no_grad():
                 v_s = agent.local_critic(fused, act_t)
             advantage = td_local - float(v_s.item())
 
-            # Update actor
+            # Update MAPPO actor with clipped surrogate objective & action masking
             if obs_np is not None:
-                al = agent.update_actor(obs_np, act, advantage)
+                al = agent.update_actor_mappo(
+                    obs_np=obs_np,
+                    action=act,
+                    advantage=advantage,
+                    old_log_prob=old_logp,
+                    action_mask=mask,
+                )
                 actor_losses.append(al)
 
         return {
@@ -223,7 +251,7 @@ class MultiAgentSystem:
             agent.save(os.path.join(save_dir, f"agent_{safe_name}.pt"))
         torch.save(self.global_critic.state_dict(),
                    os.path.join(save_dir, "global_critic.pt"))
-        print(f"[MultiAgent] Saved {len(self.agents)} agents + global critic -> {save_dir}")
+        print(f"[MultiAgent] Saved {len(self.agents)} MAPPO agents + global critic -> {save_dir}")
 
     def load_global_critic(self, path: str):
         self.global_critic.load_state_dict(torch.load(path, map_location=self.device))

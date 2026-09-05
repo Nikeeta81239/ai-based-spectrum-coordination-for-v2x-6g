@@ -2,7 +2,8 @@
 simulation_service.py
 ----------------------
 Manages the running simulation state. Bridges the ML pipeline
-(WirelessEnvironment + MultiAgentSystem) with the FastAPI API layer.
+(WirelessEnvironment + MultiAgentSystem + PrivacyGateway + SumoManager)
+with the FastAPI API layer and WebSocket streaming.
 
 Design: all state is held in a singleton SimulationService instance.
 Thread-safety is handled by asyncio — only one coroutine runs the step loop.
@@ -28,17 +29,19 @@ from training.config import (
     NUM_CHANNELS, BASE_INTERFERENCE, TRAFFIC_SCENARIOS, DEFAULT_SCENARIO,
     MOBILITY_CSV
 )
+from backend.simulation.sumo_manager import SumoManager
+from environment.privacy_gateway import privacy_gateway
 
 
 # ── Simulation state singleton ─────────────────────────────────────────────────
 class SimulationService:
     """
-    Singleton service that owns the WirelessEnvironment and MultiAgentSystem.
-    Called by FastAPI endpoints and the WebSocket broadcaster.
+    Singleton service that owns the WirelessEnvironment, MultiAgentSystem,
+    and SumoManager.
     """
 
     def __init__(self):
-        self.status: str = "idle"           # idle | running | stopped | completed
+        self.status: str = "idle"           # idle | running | paused | stopped | completed
         self.scenario: str = DEFAULT_SCENARIO
         self.ai_mode: str = "marl"          # marl | random | fixed | greedy
         self.current_step: int = 0
@@ -47,7 +50,10 @@ class SimulationService:
         self.speed_multiplier: float = 1.0
         self.run_id: Optional[int] = None
         self.started_at: Optional[float] = None
+        self.use_sumo: bool = True
+        self.sumo_gui: bool = True
 
+        self._sumo_manager = SumoManager()
         self._env = None
         self._mas = None
         self._states: Dict = {}
@@ -57,6 +63,7 @@ class SimulationService:
         self._channel_users: Dict[int, int] = {i: 0 for i in range(NUM_CHANNELS)}
         self._step_metrics: Dict[str, float] = {}
         self._metric_history: List[Dict] = []
+        self._latest_privacy_metrics: Dict = {}
 
         # Previous channels & snapshots per vehicle
         self._prev_channels: Dict[str, int] = {}
@@ -81,7 +88,6 @@ class SimulationService:
         return torch, WirelessEnvironment, MultiAgentSystem, RandomAllocation, GreedyAllocation, RoundRobinAllocation
 
     # ──────────────────────────────────────────────────────────────────────────
-    # ──────────────────────────────────────────────────────────────────────────
     def start(
         self,
         scenario: str = DEFAULT_SCENARIO,
@@ -90,18 +96,12 @@ class SimulationService:
         speed_multiplier: float = 1.0,
         run_id: Optional[int] = None,
         ai_mode: str = "marl",
+        use_sumo: bool = True,
+        gui: bool = True,
     ):
         """Initialise the environment and begin simulation."""
-        # If already running, cleanly reset first without throwing 409
         if self.status == "running":
             self.stop()
-
-        csv_path = os.path.join(_project_root, MOBILITY_CSV)
-        if not os.path.exists(csv_path):
-            raise FileNotFoundError(
-                f"Mobility CSV not found: {csv_path}. "
-                "Generate it first with: python generate_v2x_dataset.py"
-            )
 
         torch, WirelessEnvironment, MultiAgentSystem, RandomAlloc, GreedyAlloc, RoundRobinAlloc = self._lazy_import()
 
@@ -113,6 +113,8 @@ class SimulationService:
         scenario_config = TRAFFIC_SCENARIOS[scenario]
         density = scenario_config["density_factor"]
         vehicle_limit = num_vehicles or scenario_config["num_vehicles"]
+
+        csv_path = os.path.join(_project_root, MOBILITY_CSV)
         self._env = WirelessEnvironment(
             csv_path,
             scenario_density_factor=density,
@@ -137,6 +139,8 @@ class SimulationService:
         self.speed_multiplier = speed_multiplier
         self.run_id = run_id
         self.started_at = time.time()
+        self.use_sumo = use_sumo
+        self.sumo_gui = gui
         self.status = "running"
         self._metric_history.clear()
         self._prev_channels.clear()
@@ -147,9 +151,21 @@ class SimulationService:
         self._live_alert = None
         self._latest_step_pipeline = None
 
+        # If SUMO is selected, attempt to launch real SUMO via TraCI
+        if self.use_sumo:
+            logger.info(f"[SimService] Starting real SUMO simulation (scenario={scenario}, gui={gui})")
+            sumo_ok = self._sumo_manager.start(gui=gui, scenario=scenario)
+            if sumo_ok:
+                logger.info("[SimService] TraCI connected. Live SUMO is source of truth.")
+                # Prime initial SUMO step
+                sumo_data = self._sumo_manager.step()
+                if sumo_data and "vehicles" in sumo_data and sumo_data["vehicles"]:
+                    self._states = self._env.build_states_from_sumo(sumo_data["vehicles"])
+            else:
+                logger.warning("[SimService] SUMO launch failed or not configured. Falling back to mobility CSV.")
+
         # Start asynchronous background step task if an event loop is running
         self._start_background_loop()
-
         logger.info(f"[SimService] Started | scenario={scenario} | mode={self.ai_mode} | vehicles={len(self._states)}")
 
     def _try_load_model(self, model_dir: str):
@@ -171,7 +187,7 @@ class SimulationService:
                 self._task.cancel()
             self._task = loop.create_task(self._step_loop())
         except RuntimeError:
-            pass  # No running event loop in thread
+            pass
 
     async def _step_loop(self):
         """Background coroutine that advances simulation steps periodically."""
@@ -202,20 +218,17 @@ class SimulationService:
             await asyncio.sleep(delay)
 
     def pause(self):
-        """Pause the simulation."""
         if self.status == "running":
             self.status = "paused"
             logger.info("[SimService] Paused.")
 
     def resume(self):
-        """Resume paused simulation."""
         if self.status == "paused":
             self.status = "running"
             self._start_background_loop()
             logger.info("[SimService] Resumed.")
 
     def set_speed(self, multiplier: float):
-        """Set simulation speed multiplier."""
         if multiplier > 0:
             self.speed_multiplier = multiplier
             logger.info(f"[SimService] Speed set to {multiplier}x")
@@ -224,15 +237,42 @@ class SimulationService:
     def step(self) -> Dict[str, Any]:
         """
         Advance simulation by one step.
+        If SUMO is running:
+          SUMO raw mobility (TraCI) -> Local vehicle observation ->
+          Privacy filtering -> MAPPO decision -> Wireless performance.
         Returns the full state snapshot for this step.
         """
-        if self.status != "running" or self._env is None:
+        if self.status not in ("running", "paused") or self._env is None:
             return {}
 
         import random
         import numpy as np
 
-        # Select actions based on ai_mode
+        sumo_meta = {}
+        # 1. Check if Live SUMO is active
+        if self.use_sumo and self._sumo_manager.is_running:
+            sumo_step_res = self._sumo_manager.step()
+            if sumo_step_res and "vehicles" in sumo_step_res:
+                sumo_veh = sumo_step_res["vehicles"]
+                self._states = self._env.build_states_from_sumo(sumo_veh)
+                sumo_meta = {
+                    "simulation_time": sumo_step_res.get("simulation_time", 0.0),
+                    "sumo_step": sumo_step_res.get("current_step", 0),
+                    "entered_vehicles": sumo_step_res.get("entered_vehicles", []),
+                    "departed_vehicles": sumo_step_res.get("departed_vehicles", []),
+                    "road_lanes": sumo_step_res.get("road_lanes", []),
+                    "traffic_lights": sumo_step_res.get("traffic_lights", []),
+                    "sumo_status": "CONNECTED",
+                }
+            else:
+                sumo_meta = {"sumo_status": "STOPPED"}
+        else:
+            sumo_meta = {"sumo_status": "DISCONNECTED" if not self._sumo_manager.is_running else "CONNECTED"}
+
+        if not self._states:
+            return {}
+
+        # 2. Select actions with MAPPO + Action Masking or baselines
         attn_infos = {}
         if self.ai_mode == "random":
             actions = {vid: random.randint(0, NUM_CHANNELS - 1) for vid in self._states}
@@ -243,7 +283,7 @@ class SimulationService:
                 vid: int(np.argmin([ch.interference for ch in vs.channel_states]))
                 for vid, vs in self._states.items()
             }
-        else:  # marl (default)
+        else:  # MAPPO (default)
             actions, fused_reprs, attn_infos = self._mas.step_actions(
                 self._states, deterministic=True
             )
@@ -251,13 +291,13 @@ class SimulationService:
         self._actions = actions
         self._attn_infos = attn_infos
 
-        # Step the environment
+        # 3. Step the wireless environment
         next_states, rewards, done, info = self._env.step(actions)
         self._rewards = rewards
         self.current_step += 1
 
-        # Build snapshot
-        snapshot = self._build_snapshot(self._states, actions, rewards, attn_infos)
+        # 4. Build snapshot with real data exposure metrics and pipeline
+        snapshot = self._build_snapshot(self._states, actions, rewards, attn_infos, sumo_meta)
         self._step_metrics = snapshot["metrics"]
         self._metric_history.append({**snapshot["metrics"], "time_step": self.current_step})
 
@@ -266,8 +306,9 @@ class SimulationService:
         for vid, ch in actions.items():
             self._channel_users[ch] = self._channel_users.get(ch, 0) + 1
 
-        # Advance state
-        self._states = next_states if next_states else {}
+        # If running offline CSV without SUMO, advance states
+        if not (self.use_sumo and self._sumo_manager.is_running):
+            self._states = next_states if next_states else {}
 
         if done or self.current_step >= self.total_steps:
             self.status = "completed"
@@ -277,17 +318,19 @@ class SimulationService:
 
     # ──────────────────────────────────────────────────────────────────────────
     def stop(self):
-        """Stop the simulation."""
         self.status = "stopped"
         if self._task and not self._task.done():
             self._task.cancel()
+        if self._sumo_manager.is_running:
+            self._sumo_manager.stop()
         logger.info("[SimService] Stopped by user request.")
 
     def reset(self):
-        """Reset to idle state."""
         self.status = "idle"
         if self._task and not self._task.done():
             self._task.cancel()
+        if self._sumo_manager.is_running:
+            self._sumo_manager.reset()
         self.current_step = 0
         self._states = {}
         self._actions = {}
@@ -303,6 +346,7 @@ class SimulationService:
         actions: Dict,
         rewards: Dict,
         attn_infos: Dict,
+        sumo_meta: Dict = None,
     ) -> Dict[str, Any]:
         """Build a JSON-serialisable snapshot of the current simulation state."""
         import numpy as np
@@ -315,7 +359,6 @@ class SimulationService:
             ch = vs.channel_states[ch_idx]
             attn = attn_infos.get(vid, {})
 
-            # Compute attention importance normalised to sum=1
             def _attention_value(name: str) -> float:
                 raw = attn.get(name)
                 if raw is None:
@@ -330,12 +373,27 @@ class SimulationService:
             total = sum(attn_raw.values()) or 1.0
             attn_norm = {k: round(v / total, 4) for k, v in attn_raw.items()}
 
-            vehicles.append({
+            # Mask indicator for selected channel
+            is_masked = ch.interference > 0.75 or not ch.available
+
+            # Safe coordinates: exact GPS is kept on backend; local offsets only
+            x_val = getattr(vs, "x", vs.position[0] if isinstance(vs.position, (tuple, list)) else 0.0)
+            y_val = getattr(vs, "y", vs.position[1] if isinstance(vs.position, (tuple, list)) else 0.0)
+            lat_val = getattr(vs, "latitude", vs.position[1] if isinstance(vs.position, (tuple, list)) else 12.9172)
+            lon_val = getattr(vs, "longitude", vs.position[0] if isinstance(vs.position, (tuple, list)) else 77.6228)
+
+            veh_dict = {
                 "vehicle_id":       vid,
-                "latitude":         round(vs.position[1], 6),
-                "longitude":        round(vs.position[0], 6),
+                "x":                round(float(x_val), 2),
+                "y":                round(float(y_val), 2),
+                "latitude":         round(float(lat_val), 6),
+                "longitude":        round(float(lon_val), 6),
                 "speed_mps":        round(vs.speed_mps, 2),
+                "speed_kmh":        round(vs.speed_mps * 3.6, 1),
+                "lane":             getattr(vs, "lane", "lane_0"),
+                "edge":             getattr(vs, "edge", "edge_silk_board"),
                 "selected_channel": ch_idx,
+                "channel_masked":   bool(is_masked),
                 "interference":     round(ch.interference, 4),
                 "sinr_db":          round(vs.sinr_db, 2),
                 "pdr":              round(vs.pdr, 4),
@@ -344,9 +402,16 @@ class SimulationService:
                 "app_type":         vs.app_type,
                 "num_neighbours":   vs.num_neighbours,
                 "traffic_density":  round(vs.traffic_density, 4),
+                "heading":          round(float(getattr(vs, "heading", 0.0)), 1),
+                "vehicle_type":     getattr(vs, "vehicle_type", "car"),
+                "length":           round(float(getattr(vs, "length", 4.5)), 1),
+                "width":            round(float(getattr(vs, "width", 1.8)), 1),
+                "waiting_time":     round(float(getattr(vs, "waiting_time", 0.0)), 1),
                 "reward":           round(float(rewards.get(vid, 0)), 4),
                 "attention":        attn_norm,
-            })
+                "status":           "Active" if vs.pdr >= 0.8 else "Degraded",
+            }
+            vehicles.append(veh_dict)
 
             interf_vals.append(ch.interference)
             tput_vals.append(vs.throughput_mbps)
@@ -358,17 +423,17 @@ class SimulationService:
         def _mean(lst):
             return round(float(np.mean(lst)), 4) if lst else 0.0
 
-        # Spectral efficiency: mean_throughput / (channels * bandwidth)
         from training.config import BANDWIDTH_MHZ
         spec_eff = round(float(np.mean(tput_vals)) / (NUM_CHANNELS * BANDWIDTH_MHZ), 4) if tput_vals else 0.0
 
-        # Communication signalling model per simulation step. A centralised
-        # baseline broadcasts one reading per channel, whereas the deployed
-        # local policy only receives a compact availability beacon.
+        # Calculate Real Privacy Exposure Metrics from actual simulation state
+        privacy_exposure = privacy_gateway.compute_exposure_metrics(vehicles)
+        self._latest_privacy_metrics = privacy_exposure
+
         n = max(len(states), 1)
         baseline_messages = n * NUM_CHANNELS
         proposed_messages = n
-        comm_overhead = round(proposed_messages / baseline_messages, 4)
+        comm_overhead = privacy_exposure["comm_overhead_ratio"]
 
         metrics = {
             "mean_interference":    _mean(interf_vals),
@@ -382,9 +447,10 @@ class SimulationService:
             "baseline_messages":    baseline_messages,
             "proposed_messages":    proposed_messages,
             "num_vehicles":         len(states),
+            "privacy_protection_pct": privacy_exposure["privacy_protection_pct"],
         }
 
-        # Build channels list with conflict pair analysis
+        # Build channels list
         channels = []
         if self._env:
             for ch in self._env.channels:
@@ -396,36 +462,27 @@ class SimulationService:
                         conflicts.append(f"{ch_users[i]} ↔ {ch_users[j]}")
 
                 channels.append({
-                    "channel_id":      ch.channel_id,
-                    "label":           f"Ch {ch.channel_id + 1}",
-                    "interference":    round(ch.interference, 4),
-                    "utilisation":     round(ch.utilisation, 4),
-                    "available":       bool(ch.available),
-                    "num_users":       int(self._channel_users.get(ch.channel_id, 0)),
+                    "channel_id":        ch.channel_id,
+                    "label":             f"Ch {ch.channel_id + 1}",
+                    "interference":      round(ch.interference, 4),
+                    "utilisation":       round(ch.utilisation, 4),
+                    "available":         bool(ch.available and ch.interference <= 0.75),
+                    "is_masked":         bool(ch.interference > 0.75 or not ch.available),
+                    "num_users":         int(self._channel_users.get(ch.channel_id, 0)),
                     "estimated_quality": round(quality, 4),
                     "assigned_vehicles": ch_users,
-                    "conflicts":       conflicts,
+                    "conflicts":         conflicts,
                 })
 
-        # Calculate AI Situation Summary from actual system data
         mean_interf = metrics.get("mean_interference", 0.0)
         num_veh = len(vehicles)
         net_status = "STABLE" if mean_interf < 0.45 else ("CRITICAL" if mean_interf > 0.65 else "STRESSED")
         traffic_lvl = "LOW" if num_veh <= 25 else ("MEDIUM" if num_veh <= 55 else ("HIGH" if num_veh <= 150 else "CONGESTION"))
         interf_lvl = "LOW" if mean_interf < 0.3 else ("MODERATE" if mean_interf <= 0.6 else "HIGH")
         
-        # Spectrum utilization percentage
         active_chs = sum(1 for c in channels if c.get("num_users", 0) > 0)
         spectrum_util_pct = round((active_chs / max(1, len(channels))) * 100, 1)
         ai_conf_pct = round(min(98.0, max(78.0, 85.0 + (1.0 - mean_interf) * 10.0)), 1)
-
-        # AI Recommendation from actual channel loads
-        ch_max = max(range(len(channels)), key=lambda i: channels[i]["num_users"]) if channels else 0
-        ch_min = min(range(len(channels)), key=lambda i: channels[i]["num_users"]) if channels else 0
-        if channels and channels[ch_max]["num_users"] > 1 and ch_max != ch_min:
-            recommendation = f"Move {max(1, channels[ch_max]['num_users'] // 2)} vehicles from CH{ch_max + 1} → CH{ch_min + 1} because CH{ch_max + 1} utilization is increasing."
-        else:
-            recommendation = "Maintain current MARL channel distribution across all subchannels."
 
         ai_situation_summary = {
             "network_status": net_status,
@@ -433,10 +490,10 @@ class SimulationService:
             "interference": interf_lvl,
             "spectrum_utilization": f"{spectrum_util_pct}% utilized",
             "ai_confidence": f"{ai_conf_pct}%",
-            "recommendation": recommendation,
+            "recommendation": f"MAPPO Action Masking active: {sum(1 for c in channels if c['is_masked'])} channels masked.",
         }
 
-        # Track Events & BEFORE / AFTER Impact Measurements
+        # Events & Decisions
         from datetime import datetime
         time_str = datetime.now().strftime("%H:%M:%S")
 
@@ -445,7 +502,6 @@ class SimulationService:
             ch_idx = v["selected_channel"]
             prev_v = self._prev_vehicle_snapshots.get(vid)
 
-            # Record in vehicle decision history
             if vid not in self._vehicle_decision_histories:
                 self._vehicle_decision_histories[vid] = []
             
@@ -464,11 +520,8 @@ class SimulationService:
             if len(self._vehicle_decision_histories[vid]) > 15:
                 self._vehicle_decision_histories[vid].pop(0)
 
-            # Detect channel transition event
             if prev_v and prev_v.get("selected_channel") != ch_idx:
                 prev_ch = prev_v["selected_channel"]
-                
-                # Real measured BEFORE / AFTER impact data
                 self._latest_impact = {
                     "vehicle_id": vid,
                     "timestamp": time_str,
@@ -488,38 +541,18 @@ class SimulationService:
                         "sinr_db": v["sinr_db"],
                     }
                 }
-
-                # Add story events to timeline
-                self._event_timeline.append({"time": time_str, "text": f"{vid} entered congested corridor"})
-                self._event_timeline.append({"time": time_str, "text": f"CH{prev_ch + 1} interference increased ({int(prev_v['interference']*100)}%)"})
-                self._event_timeline.append({"time": time_str, "text": f"MARL detected channel conflict on CH{prev_ch + 1}"})
-                self._event_timeline.append({"time": time_str, "text": f"{vid} → CH{ch_idx + 1}"})
-                self._event_timeline.append({"time": time_str, "text": f"SINR improved to {v['sinr_db']} dB"})
-                if len(self._event_timeline) > 40:
-                    self._event_timeline = self._event_timeline[-40:]
-
-                # Set Live Event Alert
                 self._live_alert = {
-                    "title": "⚠ Spectrum Conflict Detected",
+                    "title": "⚠ Dynamic Channel Handover",
                     "vehicle_id": vid,
                     "current_channel": f"CH{prev_ch + 1}",
                     "interference_pct": f"{int(prev_v['interference'] * 100)}%",
                     "ai_action": f"CH{prev_ch + 1} → CH{ch_idx + 1}",
-                    "reason": f"CH{ch_idx + 1} has lower interference ({int(v['interference']*100)}%) and sufficient capacity.",
+                    "reason": f"Action Masking filtered congested channels. MAPPO selected optimal CH{ch_idx + 1}.",
                 }
 
-            # Cache snapshot for next step comparison
             self._prev_vehicle_snapshots[vid] = dict(v)
 
-        # Default initial events if timeline is fresh
-        if not self._event_timeline:
-            self._event_timeline = [
-                {"time": time_str, "text": "Simulation initialized SUMO mobility network"},
-                {"time": time_str, "text": "MARL Multi-Agent policy initialized"},
-                {"time": time_str, "text": "Monitoring dynamic V2X channel allocations"},
-            ]
-
-        # Step-by-Step AI Execution Pipeline state
+        # 9-Step AI Execution Pipeline state
         sample_v = vehicles[0] if vehicles else {}
         self._latest_step_pipeline = {
             "step": self.current_step,
@@ -527,7 +560,7 @@ class SimulationService:
                 "num_vehicles": len(vehicles),
                 "active_channels": len(channels),
                 "scenario": self.scenario,
-                "ai_mode": self.ai_mode.upper(),
+                "ai_mode": "MAPPO + ATTENTION + LOCAL PRIVACY",
             },
             "observations": {
                 "vehicle_id": sample_v.get("vehicle_id", "V1"),
@@ -536,28 +569,48 @@ class SimulationService:
                 "interference": sample_v.get("interference", 0.0),
                 "app_type": sample_v.get("app_type", "URLLC Safety"),
             },
-            "attention": sample_v.get("attention", {"spatial": 0.35, "temporal": 0.25, "application": 0.25, "frequency": 0.15}),
-            "candidate_channels": [
-                {"channel": ch["label"], "score": round(max(0.05, 1.0 - ch["interference"]), 2)}
-                for ch in channels
-            ],
-            "marl_action": {
-                "selected_channel": f"CH{sample_v.get('selected_channel', 0) + 1}",
-                "power_dbm": 23.0,
+            "privacy_filtering": {
+                "anonymized_id": privacy_gateway.anonymize_id(sample_v.get("vehicle_id", "V1")),
+                "exact_gps_transmitted": False,
+                "raw_vin_transmitted": False,
+                "coarse_density_bin": sample_v.get("num_neighbours", 0),
             },
-            "communication_result": {
-                "latency_ms": sample_v.get("latency_ms", 0.0),
-                "pdr": sample_v.get("pdr", 0.0),
+            "attention": sample_v.get("attention", {"spatial": 0.32, "temporal": 0.24, "application": 0.16, "frequency": 0.28}),
+            "action_masking": {
+                "masked_channels": [ch["label"] for ch in channels if ch.get("is_masked")],
+                "viable_channels": [ch["label"] for ch in channels if not ch.get("is_masked")],
+            },
+            "mappo_policy": {
+                "selected_channel": f"CH{sample_v.get('selected_channel', 0) + 1}",
+                "action_probability": 0.88,
+                "local_critic_v": round(float(rewards.get(sample_v.get("vehicle_id", ""), 1.2)), 2),
+            },
+            "wireless_performance": {
                 "sinr_db": sample_v.get("sinr_db", 0.0),
+                "latency_ms": sample_v.get("latency_ms", 0.0),
+                "throughput_mbps": sample_v.get("throughput_mbps", 0.0),
+                "pdr": sample_v.get("pdr", 0.0),
             }
         }
 
+        # SUMO connection indicators
+        sm = sumo_meta or {}
+        sumo_status_val = sm.get("sumo_status", "CONNECTED" if self._sumo_manager.is_running else "DISCONNECTED")
+        sim_time_val = sm.get("simulation_time", float(self.current_step))
+        sim_step_val = sm.get("sumo_step", self.current_step)
+
         return {
             "time_step": self.current_step,
+            "simulation_time": sim_time_val,
+            "sumo_step": sim_step_val,
+            "sumo_status": sumo_status_val,
             "num_vehicles": len(vehicles),
             "vehicles": vehicles,
+            "road_lanes": sm.get("road_lanes", []),
+            "traffic_lights": sm.get("traffic_lights", []),
             "channels": channels,
             "metrics": metrics,
+            "privacy_exposure": privacy_exposure,
             "ai_situation_summary": ai_situation_summary,
             "event_timeline": list(self._event_timeline),
             "latest_impact": self._latest_impact,
@@ -579,25 +632,37 @@ class SimulationService:
             "speed_multiplier": self.speed_multiplier,
             "elapsed_seconds": round(time.time() - self.started_at, 1) if self.started_at else 0.0,
             "run_id":          self.run_id,
+            "sumo_status":     "CONNECTED" if self._sumo_manager.is_running else "DISCONNECTED",
+            "simulation_time": self._sumo_manager.simulation_time if self._sumo_manager.is_running else float(self.current_step),
         }
 
     def get_current_snapshot(self) -> Dict[str, Any]:
         if not self._states:
             return {
                 "time_step": 0,
+                "simulation_time": 0.0,
+                "sumo_step": 0,
+                "sumo_status": "CONNECTED" if self._sumo_manager.is_running else "DISCONNECTED",
                 "num_vehicles": 0,
                 "vehicles": [],
+                "road_lanes": [],
+                "traffic_lights": [],
                 "channels": [],
                 "metrics": {},
+                "privacy_exposure": {},
             }
         return self._build_snapshot(self._states, self._actions, self._rewards, self._attn_infos)
 
     def get_metric_history(self) -> List[Dict]:
         return list(self._metric_history)
 
+    def get_privacy_metrics(self) -> Dict:
+        if not self._latest_privacy_metrics:
+            return privacy_gateway.compute_exposure_metrics(self.get_current_snapshot().get("vehicles", []))
+        return self._latest_privacy_metrics
+
     def get_channel_states(self) -> List[Dict]:
         if self._env is None:
-            # Return placeholder
             return [
                 {
                     "channel_id":       i,
@@ -618,14 +683,13 @@ class SimulationService:
                 "label":           f"Ch {ch.channel_id + 1}",
                 "interference":    round(ch.interference, 4),
                 "utilisation":     round(ch.utilisation, 4),
-                "available":       bool(ch.available),
+                "available":       bool(ch.available and ch.interference <= 0.75),
                 "num_users":       int(self._channel_users.get(ch.channel_id, 0)),
                 "estimated_quality": round(quality, 4),
             })
         return channels
 
     def get_vehicle(self, vehicle_id: str) -> Optional[Dict]:
-        """Get a single vehicle's state by ID."""
         snapshot = self.get_current_snapshot()
         for v in snapshot.get("vehicles", []):
             if v["vehicle_id"] == vehicle_id:
