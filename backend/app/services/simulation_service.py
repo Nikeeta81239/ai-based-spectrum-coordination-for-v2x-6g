@@ -48,6 +48,7 @@ class SimulationService:
         self.total_steps: int = 600
         self.requested_num_vehicles: Optional[int] = None
         self.speed_multiplier: float = 1.0
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None  # captured on first API call
         self.run_id: Optional[int] = None
         self.started_at: Optional[float] = None
         self.use_sumo: bool = True
@@ -151,22 +152,55 @@ class SimulationService:
         self._live_alert = None
         self._latest_step_pipeline = None
 
-        # If SUMO is selected, attempt to launch real SUMO via TraCI
-        if self.use_sumo:
-            logger.info(f"[SimService] Starting real SUMO simulation (scenario={scenario}, gui={gui})")
-            sumo_ok = self._sumo_manager.start(gui=gui, scenario=scenario)
-            if sumo_ok:
-                logger.info("[SimService] TraCI connected. Live SUMO is source of truth.")
-                # Prime initial SUMO step
-                sumo_data = self._sumo_manager.step()
-                if sumo_data and "vehicles" in sumo_data and sumo_data["vehicles"]:
-                    self._states = self._env.build_states_from_sumo(sumo_data["vehicles"])
-            else:
-                logger.warning("[SimService] SUMO launch failed or not configured. Falling back to mobility CSV.")
+        try:
+            # If SUMO is selected, attempt to launch real SUMO via TraCI
+            if self.use_sumo:
+                logger.info(f"[SimService] Starting real SUMO simulation (scenario={scenario}, gui={gui})")
+                sumo_ok = self._sumo_manager.start(gui=gui, scenario=scenario)
+                if sumo_ok:
+                    logger.info("[SimService] TraCI connected. Live SUMO is source of truth.")
+                    # Prime initial SUMO step
+                    sumo_data = self._sumo_manager.step()
+                    if sumo_data and "vehicles" in sumo_data and sumo_data["vehicles"]:
+                        self._states = self._env.build_states_from_sumo(sumo_data["vehicles"])
+                else:
+                    logger.warning("[SimService] SUMO launch failed or not configured. Falling back to mobility CSV.")
 
-        # Start asynchronous background step task if an event loop is running
-        self._start_background_loop()
-        logger.info(f"[SimService] Started | scenario={scenario} | mode={self.ai_mode} | vehicles={len(self._states)}")
+            self.status = "running"
+
+            # Notify clients immediately that we are now running
+            if self._main_loop and self._main_loop.is_running():
+                from ..websocket.simulation_socket import manager
+                self._main_loop.call_soon_threadsafe(
+                    lambda: self._main_loop.create_task(
+                        manager.broadcast({
+                            "type": "status",
+                            "status": "running",
+                            "data": self.get_current_snapshot(),
+                            "timestamp": time.time(),
+                        })
+                    )
+                )
+
+            # Start asynchronous background step task if an event loop is running
+            self._start_background_loop()
+            logger.info(f"[SimService] Started | scenario={scenario} | mode={self.ai_mode} | vehicles={len(self._states)}")
+        except Exception as e:
+            logger.exception(f"[SimService] Failed during simulation startup: {e}")
+            self.status = "idle"
+            self._sumo_manager.stop()
+            if self._main_loop and self._main_loop.is_running():
+                from ..websocket.simulation_socket import manager
+                self._main_loop.call_soon_threadsafe(
+                    lambda: self._main_loop.create_task(
+                        manager.broadcast({
+                            "type": "status",
+                            "status": "idle",
+                            "data": self.get_current_snapshot(),
+                            "timestamp": time.time(),
+                        })
+                    )
+                )
 
     def _try_load_model(self, model_dir: str):
         """Load the central critic and configure local policy checkpoints."""
@@ -180,22 +214,28 @@ class SimulationService:
             logger.warning(f"[SimService] Could not load model: {exc}")
 
     def _start_background_loop(self):
-        """Start async stepping loop in current event loop."""
+        """Schedule the async step loop — safe to call from any thread."""
         try:
+            # Called from the main asyncio thread (e.g. pause/resume via API)
             loop = asyncio.get_running_loop()
             if self._task and not self._task.done():
                 self._task.cancel()
             self._task = loop.create_task(self._step_loop())
         except RuntimeError:
-            pass
+            # Called from run_in_executor background thread — use stored main loop
+            if self._main_loop and self._main_loop.is_running():
+                self._main_loop.call_soon_threadsafe(
+                    lambda: self._main_loop.create_task(self._step_loop())
+                )
 
     async def _step_loop(self):
-        """Background coroutine that advances simulation steps periodically."""
+        """Background coroutine that advances simulation steps periodically in a worker thread."""
         from ..websocket.simulation_socket import manager
         while self.status in ("running", "paused"):
             if self.status == "running":
                 try:
-                    snap = self.step()
+                    # Non-blocking: execute TraCI + PyTorch step in worker thread so event loop never freezes
+                    snap = await asyncio.to_thread(self.step)
                     if snap:
                         await manager.broadcast({
                             "type": "state",
@@ -212,9 +252,17 @@ class SimulationService:
                         break
                 except Exception as e:
                     logger.error(f"[SimService] Error in step loop: {e}")
+                    self.stop()
+                    await manager.broadcast({
+                        "type": "status",
+                        "status": "stopped",
+                        "data": self.get_current_snapshot(),
+                        "timestamp": time.time(),
+                    })
+                    break
 
-            # Sleep based on speed multiplier (base 0.6s per step)
-            delay = max(0.05, 0.6 / max(0.1, self.speed_multiplier))
+            # Sleep: 0.1s at 1x speed, less at higher speeds, more at lower
+            delay = max(0.02, 0.1 / max(0.1, self.speed_multiplier))
             await asyncio.sleep(delay)
 
     def pause(self):
@@ -321,22 +369,44 @@ class SimulationService:
         self.status = "stopped"
         if self._task and not self._task.done():
             self._task.cancel()
-        if self._sumo_manager.is_running:
-            self._sumo_manager.stop()
+        self._sumo_manager.stop()
+        if self._main_loop and self._main_loop.is_running():
+            from ..websocket.simulation_socket import manager
+            self._main_loop.call_soon_threadsafe(
+                lambda: self._main_loop.create_task(
+                    manager.broadcast({
+                        "type": "status",
+                        "status": "stopped",
+                        "data": self.get_current_snapshot(),
+                        "timestamp": time.time(),
+                    })
+                )
+            )
         logger.info("[SimService] Stopped by user request.")
 
     def reset(self):
         self.status = "idle"
         if self._task and not self._task.done():
             self._task.cancel()
-        if self._sumo_manager.is_running:
-            self._sumo_manager.reset()
+        self._sumo_manager.reset()
         self.current_step = 0
         self._states = {}
         self._actions = {}
         self._rewards = {}
         self._metric_history.clear()
         self._prev_channels.clear()
+        if self._main_loop and self._main_loop.is_running():
+            from ..websocket.simulation_socket import manager
+            self._main_loop.call_soon_threadsafe(
+                lambda: self._main_loop.create_task(
+                    manager.broadcast({
+                        "type": "status",
+                        "status": "idle",
+                        "data": self.get_current_snapshot(),
+                        "timestamp": time.time(),
+                    })
+                )
+            )
         logger.info("[SimService] Reset to idle.")
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -435,21 +505,6 @@ class SimulationService:
         proposed_messages = n
         comm_overhead = privacy_exposure["comm_overhead_ratio"]
 
-        metrics = {
-            "mean_interference":    _mean(interf_vals),
-            "mean_throughput_mbps": _mean(tput_vals),
-            "mean_latency_ms":      _mean(lat_vals),
-            "mean_pdr":             _mean(pdr_vals),
-            "mean_sinr_db":         _mean(sinr_vals),
-            "spectral_efficiency":  spec_eff,
-            "mean_reward":          _mean(rw_vals),
-            "comm_overhead":        comm_overhead,
-            "baseline_messages":    baseline_messages,
-            "proposed_messages":    proposed_messages,
-            "num_vehicles":         len(states),
-            "privacy_protection_pct": privacy_exposure["privacy_protection_pct"],
-        }
-
         # Build channels list
         channels = []
         if self._env:
@@ -474,14 +529,30 @@ class SimulationService:
                     "conflicts":         conflicts,
                 })
 
+        active_chs = sum(1 for c in channels if c.get("num_users", 0) > 0)
+        spectrum_util_pct = round((active_chs / max(1, len(channels))) * 100, 1)
+
+        metrics = {
+            "mean_interference":    _mean(interf_vals),
+            "mean_throughput_mbps": _mean(tput_vals),
+            "mean_latency_ms":      _mean(lat_vals),
+            "mean_pdr":             _mean(pdr_vals),
+            "mean_sinr_db":         _mean(sinr_vals),
+            "spectral_efficiency":  spec_eff,
+            "mean_reward":          _mean(rw_vals),
+            "comm_overhead":        comm_overhead,
+            "baseline_messages":    baseline_messages,
+            "proposed_messages":    proposed_messages,
+            "num_vehicles":         len(states),
+            "privacy_protection_pct": privacy_exposure["privacy_protection_pct"],
+            "spectrum_utilization": spectrum_util_pct,
+        }
+
         mean_interf = metrics.get("mean_interference", 0.0)
         num_veh = len(vehicles)
         net_status = "STABLE" if mean_interf < 0.45 else ("CRITICAL" if mean_interf > 0.65 else "STRESSED")
         traffic_lvl = "LOW" if num_veh <= 25 else ("MEDIUM" if num_veh <= 55 else ("HIGH" if num_veh <= 150 else "CONGESTION"))
         interf_lvl = "LOW" if mean_interf < 0.3 else ("MODERATE" if mean_interf <= 0.6 else "HIGH")
-        
-        active_chs = sum(1 for c in channels if c.get("num_users", 0) > 0)
-        spectrum_util_pct = round((active_chs / max(1, len(channels))) * 100, 1)
         ai_conf_pct = round(min(98.0, max(78.0, 85.0 + (1.0 - mean_interf) * 10.0)), 1)
 
         ai_situation_summary = {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2026-09-05T23:33:02.659976+05:30 by Eclipse SUMO sumo 1.27.1
+<!-- generated on 2026-09-07T18:07:01.797503+05:30 by Eclipse SUMO sumo 1.27.1
 <sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
 
     <input>
@@ -28,7 +28,7 @@
     </processing>
 
     <traci_server>
-        <remote-port value="60923"/>
+        <remote-port value="60177"/>
     </traci_server>
 
     <gui_only>
@@ -52,4 +52,10 @@
     <tripinfo id="13" depart="78.00" departLane="309627853#0_0" departPos="4.60" departSpeed="13.89" departDelay="0.00" arrival="360.00" arrivalLane="27935825#0_0" arrivalPos="64.68" arrivalSpeed="13.64" duration="282.00" routeLength="3942.84" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="30.76" rerouteNo="0" devices="tripinfo_13 fcd_13" vType="car" speedFactor="1.05" vaporized=""/>
     <tripinfo id="11" depart="66.00" departLane="-1184399926_0" departPos="4.60" departSpeed="13.89" departDelay="0.00" arrival="392.00" arrivalLane="-135265524#4_0" arrivalPos="38.46" arrivalSpeed="12.99" duration="326.00" routeLength="3938.80" waitingTime="24.00" waitingCount="1" stopTime="0.00" timeLoss="73.17" rerouteNo="0" devices="tripinfo_11 fcd_11" vType="car" speedFactor="1.09" vaporized=""/>
     <tripinfo id="4" depart="24.00" departLane="-447660735#0_0" departPos="2.30" departSpeed="5.56" departDelay="0.00" arrival="396.00" arrivalLane="-1157609914#6_0" arrivalPos="14.56" arrivalSpeed="16.61" duration="372.00" routeLength="3832.37" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="53.50" rerouteNo="0" devices="tripinfo_4 fcd_4" vType="motorcycle" speedFactor="1.03" vaporized=""/>
+    <tripinfo id="25" depart="150.00" departLane="135262269#1_0" departPos="4.60" departSpeed="11.47" departDelay="0.00" arrival="436.00" arrivalLane="137508343#4_0" arrivalPos="0.20" arrivalSpeed="10.84" duration="286.00" routeLength="2869.86" waitingTime="56.00" waitingCount="2" stopTime="0.00" timeLoss="88.93" rerouteNo="0" devices="tripinfo_25 fcd_25" vType="car" speedFactor="0.83" vaporized=""/>
+    <tripinfo id="14" depart="84.00" departLane="1042112410_0" departPos="0.20" departSpeed="0.00" departDelay="0.00" arrival="471.00" arrivalLane="778508081#0_0" arrivalPos="20.44" arrivalSpeed="15.00" duration="387.00" routeLength="4288.67" waitingTime="60.00" waitingCount="2" stopTime="0.00" timeLoss="113.22" rerouteNo="0" devices="tripinfo_14 fcd_14" vType="car" speedFactor="1.12" vaporized=""/>
+    <tripinfo id="20" depart="120.00" departLane="-1165327595_0" departPos="2.30" departSpeed="2.78" departDelay="0.00" arrival="486.00" arrivalLane="-309184646#2_0" arrivalPos="46.80" arrivalSpeed="14.58" duration="366.00" routeLength="3983.60" waitingTime="51.00" waitingCount="2" stopTime="0.00" timeLoss="104.32" rerouteNo="0" devices="tripinfo_20 fcd_20" vType="motorcycle" speedFactor="1.16" vaporized=""/>
+    <tripinfo id="9" depart="54.00" departLane="-310456204_0" departPos="4.60" departSpeed="13.03" departDelay="0.00" arrival="489.00" arrivalLane="-213072291_0" arrivalPos="95.86" arrivalSpeed="11.94" duration="435.00" routeLength="4626.51" waitingTime="87.00" waitingCount="3" stopTime="0.00" timeLoss="136.26" rerouteNo="0" devices="tripinfo_9 fcd_9" vType="car" speedFactor="0.94" vaporized=""/>
+    <tripinfo id="52" depart="312.00" departLane="-735135994#3_0" departPos="4.60" departSpeed="13.89" departDelay="0.00" arrival="495.00" arrivalLane="-24489065#3_0" arrivalPos="25.48" arrivalSpeed="14.61" duration="183.00" routeLength="2045.58" waitingTime="25.00" waitingCount="1" stopTime="0.00" timeLoss="54.05" rerouteNo="0" devices="tripinfo_52 fcd_52" vType="car" speedFactor="1.17" vaporized=""/>
+    <tripinfo id="51" depart="306.00" departLane="38772795#8_0" departPos="0.22" departSpeed="16.67" departDelay="0.00" arrival="506.00" arrivalLane="-32315815#0_0" arrivalPos="50.45" arrivalSpeed="11.61" duration="200.00" routeLength="1719.17" waitingTime="47.00" waitingCount="1" stopTime="0.00" timeLoss="72.84" rerouteNo="0" devices="tripinfo_51 fcd_51" vType="car" speedFactor="0.85" vaporized=""/>
 </tripinfos>

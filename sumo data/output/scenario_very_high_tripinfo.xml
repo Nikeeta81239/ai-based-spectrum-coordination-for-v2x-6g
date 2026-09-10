@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-09-06T18:05:51.938152+05:30 by Eclipse SUMO GUI 1.27.1
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../network/network.net.xml"/>
+        <route-files value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../routes/scenario_very_high.rou.xml"/>
+        <additional-files value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../additional/additional.add.xml,C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../additional/traffic_lights.add.xml"/>
+    </input>
+
+    <output>
+        <fcd-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../output/scenario_very_high_fcd.xml"/>
+        <summary-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../output/scenario_very_high_summary.xml"/>
+        <tripinfo-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../output/scenario_very_high_tripinfo.xml"/>
+    </output>
+
+    <time>
+        <begin value="0"/>
+        <end value="3600"/>
+        <step-length value="1.0"/>
+    </time>
+
+    <processing>
+        <ignore-route-errors value="true"/>
+        <collision.action value="warn"/>
+        <time-to-teleport value="300"/>
+    </processing>
+
+    <traci_server>
+        <remote-port value="51802"/>
+    </traci_server>
+
+    <gui_only>
+        <gui-settings-file value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../gui_settings.xml"/>
+        <quit-on-end value="false"/>
+        <start value="true"/>
+    </gui_only>
+
+</sumoConfiguration>
+-->
+
+<tripinfos xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tripinfo_file.xsd">

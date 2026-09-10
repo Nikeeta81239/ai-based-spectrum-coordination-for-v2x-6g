@@ -28,6 +28,21 @@ STANDARD_SUMO_PATHS = [
 ]
 
 
+def kill_all_sumo_processes():
+    """Force-terminate any lingering sumo or sumo-gui processes so ports and locks are released."""
+    try:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "sumo.exe", "/IM", "sumo-gui.exe"],
+                capture_output=True,
+                timeout=5,
+            )
+        else:
+            subprocess.run(["pkill", "-9", "-f", "sumo"], capture_output=True, timeout=5)
+    except Exception:
+        pass
+
+
 class SumoManager:
     """
     Controller for the live SUMO simulation via Python TraCI.
@@ -111,9 +126,8 @@ class SumoManager:
             import traci
             self.traci = traci
 
-            # If already connected, close first
-            if self.is_running:
-                self.stop()
+            # Ensure any leftover/zombie SUMO processes from previous runs or system sleep are terminated
+            kill_all_sumo_processes()
 
             binary = self.sumo_gui_binary if gui else self.sumo_binary
             cmd = [
@@ -287,7 +301,7 @@ class SumoManager:
 
     def stop(self):
         """Safely close TraCI connection and shut down SUMO process."""
-        if self.traci and self.is_running:
+        if self.traci:
             try:
                 self.traci.close()
             except Exception as e:
@@ -296,7 +310,8 @@ class SumoManager:
         self.status = "STOPPED"
         self.active_vehicle_ids.clear()
         self._prev_speeds.clear()
-        logger.info("[SumoManager] Simulation stopped.")
+        kill_all_sumo_processes()
+        logger.info("[SumoManager] Simulation stopped and processes cleaned.")
 
     def reset(self):
         """Reset SUMO manager state."""

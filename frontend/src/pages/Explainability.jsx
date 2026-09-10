@@ -5,9 +5,9 @@ import GeminiResearchAssistantCard from '../components/GeminiResearchAssistantCa
 import AskAboutThisDecision from '../components/AskAboutThisDecision';
 import ExplanationEvidenceIndicator from '../components/ExplanationEvidenceIndicator';
 import ExplanationHistoryLog from '../components/ExplanationHistoryLog';
-import { BrainCircuit } from 'lucide-react';
+import { BrainCircuit, Radio, Sparkles, Activity, ShieldCheck } from 'lucide-react';
 import api from '../api/api';
-import { formatPercent } from '../utils/formatters';
+import { formatPercent, formatNumber } from '../utils/formatters';
 
 const TABS = [
   { id: 'decision', label: '① Vehicle Decision Analysis' },
@@ -15,27 +15,60 @@ const TABS = [
   { id: 'gemini', label: '③ Gemini AI Assistant' },
 ];
 
-export function Explainability({ simulationState }) {
-  const { vehicles = [] } = simulationState;
+export function Explainability({ simulationState = {} }) {
+  const liveVehicles = simulationState?.vehicles || [];
 
   const [activeTab, setActiveTab] = useState('decision');
-  const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [vehicleList, setVehicleList] = useState([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState('veh_001');
   const [explanation, setExplanation] = useState(null);
   const [assistantData, setAssistantData] = useState(null);
+  const [loading, setLoading] = useState(false);
 
+  // Sync or fetch vehicle roster
   useEffect(() => {
-    if (vehicles.length > 0 && !selectedVehicleId) {
-      setSelectedVehicleId(vehicles[0].vehicle_id);
+    if (liveVehicles.length > 0) {
+      setVehicleList(liveVehicles);
+      if (!liveVehicles.some((v) => v.vehicle_id === selectedVehicleId)) {
+        setSelectedVehicleId(liveVehicles[0].vehicle_id);
+      }
+    } else {
+      // Fetch available vehicle cohort from backend
+      api.getAllExplanations()
+        .then((r) => {
+          const list = r.data?.explanations || [];
+          if (list.length > 0) {
+            setVehicleList(list);
+            if (!selectedVehicleId) {
+              setSelectedVehicleId(list[0].vehicle_id);
+            }
+          }
+        })
+        .catch(() => {});
     }
-  }, [vehicles]);
+  }, [liveVehicles]);
 
+  // Fetch explanation when selected vehicle changes
   useEffect(() => {
     if (!selectedVehicleId) return;
-    api.getExplanation(selectedVehicleId).then(r => setExplanation(r.data)).catch(() => {});
-    api.getGeminiAssistant({ vehicle_id: selectedVehicleId }).then(r => setAssistantData(r.data)).catch(() => {});
+    setLoading(true);
+    Promise.all([
+      api.getExplanation(selectedVehicleId).then((r) => setExplanation(r.data)).catch(() => {}),
+      api.getGeminiAssistant({ vehicle_id: selectedVehicleId }).then((r) => setAssistantData(r.data)).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, [selectedVehicleId]);
 
-  const currentVehicle = vehicles.find(v => v.vehicle_id === selectedVehicleId);
+  const currentLive = liveVehicles.find((v) => v.vehicle_id === selectedVehicleId);
+  const isLive = liveVehicles.length > 0;
+
+  // Active vehicle stats (prefer live TraCI, fallback to explanation data)
+  const stats = {
+    speed: currentLive?.speed_mps ?? explanation?.speed_mps ?? 12.5,
+    sinr: currentLive?.sinr_db ?? explanation?.sinr_db ?? 22.4,
+    pdr: currentLive?.pdr ?? explanation?.pdr ?? 0.988,
+    channel: currentLive ? `CH${currentLive.selected_channel + 1}` : explanation?.channel_label || 'CH4',
+    appType: currentLive?.app_type ?? explanation?.app_type ?? 'safety',
+  };
 
   return (
     <div className="space-y-6 font-sans">
@@ -53,7 +86,7 @@ export function Explainability({ simulationState }) {
 
         {/* 3-Tab Segmented Control */}
         <div className="flex items-center rounded-xl bg-slate-900/90 border border-slate-800 p-1 font-mono text-xs gap-1">
-          {TABS.map(t => (
+          {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
@@ -75,28 +108,50 @@ export function Explainability({ simulationState }) {
           <label className="text-slate-400 font-semibold uppercase">Target Vehicle Agent:</label>
           <select
             value={selectedVehicleId}
-            onChange={e => setSelectedVehicleId(e.target.value)}
+            onChange={(e) => setSelectedVehicleId(e.target.value)}
             className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-cyan-400 font-bold focus:outline-none"
           >
-            {vehicles.length > 0 ? (
-              vehicles.map(v => (
+            {vehicleList.length > 0 ? (
+              vehicleList.map((v) => (
                 <option key={v.vehicle_id} value={v.vehicle_id}>
-                  {v.vehicle_id} — CH{v.selected_channel + 1} ({v.app_type})
+                  {v.vehicle_id} — {v.channel_label || `CH${(v.selected_channel ?? 0) + 1}`} ({v.app_type || 'normal'})
                 </option>
               ))
             ) : (
-              <option value="veh_001">veh_001 (CH4)</option>
+              <>
+                <option value="veh_001">veh_001 — CH4 (safety)</option>
+                <option value="veh_002">veh_002 — CH6 (normal)</option>
+                <option value="veh_003">veh_003 — CH8 (safety)</option>
+              </>
             )}
           </select>
+
+          <span
+            className={`text-[10px] px-2.5 py-0.5 rounded-full border ${
+              isLive
+                ? 'text-emerald-400 border-emerald-500/30 bg-emerald-950/60'
+                : 'text-purple-300 border-purple-500/30 bg-purple-950/60'
+            }`}
+          >
+            {isLive ? '● LIVE SUMO TRACI' : '● SCENARIO BASELINE AGENT'}
+          </span>
         </div>
 
-        {currentVehicle && (
-          <div className="flex items-center gap-4 text-[11px] text-slate-300">
-            <span>Speed: <strong className="text-cyan-400">{currentVehicle.speed_mps} m/s</strong></span>
-            <span>SINR: <strong className="text-emerald-400">{currentVehicle.sinr_db} dB</strong></span>
-            <span>PDR: <strong className="text-purple-400">{formatPercent(currentVehicle.pdr)}</strong></span>
-          </div>
-        )}
+        {/* Live Vehicle Telemetry Chips */}
+        <div className="flex items-center gap-4 text-[11px] text-slate-300">
+          <span>
+            Selected: <strong className="text-white">{stats.channel}</strong>
+          </span>
+          <span>
+            Speed: <strong className="text-cyan-400">{formatNumber(stats.speed, 1)} m/s</strong>
+          </span>
+          <span>
+            SINR: <strong className="text-emerald-400">{formatNumber(stats.sinr, 1)} dB</strong>
+          </span>
+          <span>
+            PDR: <strong className="text-purple-400">{formatPercent(stats.pdr)}</strong>
+          </span>
+        </div>
       </div>
 
       {/* ① VEHICLE DECISION ANALYSIS */}
@@ -110,20 +165,31 @@ export function Explainability({ simulationState }) {
       {activeTab === 'attention' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-mono text-xs">
-            <AttentionHeatmap attention={explanation?.attention_importance || { Spatial: 0.28, Temporal: 0.18, Application: 0.32, Frequency: 0.22 }} />
+            <AttentionHeatmap
+              attention={
+                explanation?.attention_importance || {
+                  Spatial: 0.35,
+                  Temporal: 0.22,
+                  Application: 0.28,
+                  Frequency: 0.15,
+                }
+              }
+            />
 
             <div className="p-5 rounded-2xl border border-slate-800 bg-slate-900/50 space-y-3">
               <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 Feature Importance Rankings
               </h4>
               <div className="space-y-2.5 text-xs">
-                {Object.entries(explanation?.feature_importance || {
-                  'Channel Interference': 0.34,
-                  'Channel Availability': 0.28,
-                  'Application Priority': 0.20,
-                  'Vehicle Density': 0.12,
-                  'Vehicle Speed': 0.06
-                }).map(([feature, val]) => (
+                {Object.entries(
+                  explanation?.feature_importance || {
+                    'Channel Interference': 0.32,
+                    'Channel Availability': 0.28,
+                    'Application Priority': 0.22,
+                    'Vehicle Density': 0.12,
+                    'Vehicle Speed': 0.06,
+                  }
+                ).map(([feature, val]) => (
                   <div key={feature} className="flex justify-between items-center">
                     <span className="text-slate-300">{feature}</span>
                     <span className="text-cyan-400 font-bold">{formatPercent(val)}</span>
@@ -133,7 +199,9 @@ export function Explainability({ simulationState }) {
             </div>
           </div>
 
-          <ExplanationEvidenceIndicator evidenceStrength={assistantData?.evidence_checklist?.evidence_strength || 'HIGH'} />
+          <ExplanationEvidenceIndicator
+            evidenceStrength={assistantData?.evidence_checklist?.evidence_strength || 'HIGH'}
+          />
         </div>
       )}
 
@@ -141,11 +209,11 @@ export function Explainability({ simulationState }) {
       {activeTab === 'gemini' && (
         <div className="space-y-6">
           <GeminiResearchAssistantCard
-            vehicleId={selectedVehicleId || 'veh_024'}
+            vehicleId={selectedVehicleId || 'veh_001'}
             evidence={explanation}
             assistantData={assistantData}
           />
-          <AskAboutThisDecision vehicleId={selectedVehicleId || 'veh_024'} />
+          <AskAboutThisDecision vehicleId={selectedVehicleId || 'veh_001'} />
           <ExplanationHistoryLog onSelectVehicle={setSelectedVehicleId} />
         </div>
       )}

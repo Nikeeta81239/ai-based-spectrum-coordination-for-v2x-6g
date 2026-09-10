@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-09-06T18:11:00.868067+05:30 by Eclipse SUMO GUI 1.27.1
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../network/network.net.xml"/>
+        <route-files value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../routes/scenario_medium.rou.xml"/>
+        <additional-files value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../additional/additional.add.xml,C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../additional/traffic_lights.add.xml"/>
+    </input>
+
+    <output>
+        <fcd-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../output/scenario_medium_fcd.xml"/>
+        <summary-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../output/scenario_medium_summary.xml"/>
+        <tripinfo-output value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../output/scenario_medium_tripinfo.xml"/>
+    </output>
+
+    <time>
+        <begin value="0"/>
+        <end value="3600"/>
+        <step-length value="1.0"/>
+    </time>
+
+    <processing>
+        <ignore-route-errors value="true"/>
+        <collision.action value="warn"/>
+        <time-to-teleport value="300"/>
+    </processing>
+
+    <traci_server>
+        <remote-port value="64908"/>
+    </traci_server>
+
+    <gui_only>
+        <gui-settings-file value="C:\Users\subha\OneDrive\Pictures\Desktop\major_project\sumo data\configs\../gui_settings.xml"/>
+        <quit-on-end value="false"/>
+        <start value="true"/>
+    </gui_only>
+
+</sumoConfiguration>
+-->
+
+<tripinfos xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tripinfo_file.xsd">
+    <tripinfo id="20" depart="60.00" departLane="778187991_0" departPos="2.30" departSpeed="13.89" departDelay="0.00" arrival="128.00" arrivalLane="310356002_0" arrivalPos="158.32" arrivalSpeed="13.23" duration="68.00" routeLength="766.07" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="11.86" rerouteNo="0" devices="tripinfo_20 fcd_20" vType="motorcycle" speedFactor="1.02" vaporized=""/>
+    <tripinfo id="6" depart="18.00" departLane="1159872650#9_0" departPos="4.60" departSpeed="16.67" departDelay="0.00" arrival="164.00" arrivalLane="-799592387_0" arrivalPos="35.33" arrivalSpeed="13.94" duration="146.00" routeLength="1953.44" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="14.04" rerouteNo="0" devices="tripinfo_6 fcd_6" vType="car" speedFactor="1.05" vaporized=""/>
+    <tripinfo id="5" depart="15.00" departLane="37786356#0_0" departPos="4.60" departSpeed="11.54" departDelay="0.00" arrival="187.00" arrivalLane="1363519084_0" arrivalPos="0.20" arrivalSpeed="10.97" duration="172.00" routeLength="2149.89" waitingTime="1.00" waitingCount="1" stopTime="0.00" timeLoss="20.25" rerouteNo="0" devices="tripinfo_5 fcd_5" vType="car" speedFactor="0.83" vaporized=""/>
+    <tripinfo id="7" depart="21.00" departLane="-217575277#1_0" departPos="2.30" departSpeed="12.31" departDelay="0.00" arrival="191.00" arrivalLane="-175055140#1_0" arrivalPos="83.52" arrivalSpeed="10.64" duration="170.00" routeLength="2251.97" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="25.85" rerouteNo="0" devices="tripinfo_7 fcd_7" vType="motorcycle" speedFactor="0.89" vaporized=""/>
+    <tripinfo id="22" depart="66.00" departLane="-128220148#7_0" departPos="4.60" departSpeed="13.54" departDelay="0.00" arrival="213.00" arrivalLane="-27935564#0_0" arrivalPos="24.27" arrivalSpeed="12.41" duration="147.00" routeLength="1828.59" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="21.74" rerouteNo="0" devices="tripinfo_22 fcd_22" vType="car" speedFactor="0.97" vaporized=""/>
+    <tripinfo id="24" depart="72.00" departLane="323036048#1_0" departPos="4.60" departSpeed="11.47" departDelay="0.00" arrival="252.00" arrivalLane="-122912057#27_0" arrivalPos="8.24" arrivalSpeed="16.60" duration="180.00" routeLength="2249.26" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="26.56" rerouteNo="0" devices="tripinfo_24 fcd_24" vType="car" speedFactor="0.83" vaporized=""/>
+    <tripinfo id="12" depart="36.00" departLane="1487518778_0" departPos="2.30" departSpeed="2.78" departDelay="0.00" arrival="254.00" arrivalLane="59358767#6_0" arrivalPos="25.74" arrivalSpeed="12.65" duration="218.00" routeLength="1683.11" waitingTime="76.00" waitingCount="1" stopTime="0.00" timeLoss="104.86" rerouteNo="0" devices="tripinfo_12 fcd_12" vType="motorcycle" speedFactor="1.05" vaporized=""/>
+    <tripinfo id="66" depart="198.00" departLane="-122911950_0" departPos="2.30" departSpeed="12.26" departDelay="0.00" arrival="282.00" arrivalLane="61418765_0" arrivalPos="104.35" arrivalSpeed="4.05" duration="84.00" routeLength="383.68" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="16.43" rerouteNo="0" devices="tripinfo_66 fcd_66" vType="motorcycle" speedFactor="0.88" vaporized=""/>
+    <tripinfo id="27" depart="81.00" departLane="-309618862_0" departPos="12.10" departSpeed="13.89" departDelay="0.00" arrival="325.00" arrivalLane="-1262069472_0" arrivalPos="112.35" arrivalSpeed="13.55" duration="244.00" routeLength="2632.93" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="43.39" rerouteNo="0" devices="tripinfo_27 fcd_27" vType="bus" speedFactor="1.00" vaporized=""/>
+    <tripinfo id="55" depart="165.00" departLane="1109904949_0" departPos="4.60" departSpeed="11.12" departDelay="0.00" arrival="328.00" arrivalLane="695012195_0" arrivalPos="65.55" arrivalSpeed="12.99" duration="163.00" routeLength="1935.47" waitingTime="12.00" waitingCount="1" stopTime="0.00" timeLoss="38.92" rerouteNo="0" devices="tripinfo_55 fcd_55" vType="car" speedFactor="1.00" vaporized=""/>
+    <tripinfo id="51" depart="153.00" departLane="135262274#4_0" departPos="4.60" departSpeed="11.87" departDelay="0.00" arrival="348.00" arrivalLane="1199674749#0_1" arrivalPos="11.88" arrivalSpeed="16.50" duration="195.00" routeLength="2222.85" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="27.27" rerouteNo="0" devices="tripinfo_51 fcd_51" vType="car" speedFactor="0.85" vaporized=""/>

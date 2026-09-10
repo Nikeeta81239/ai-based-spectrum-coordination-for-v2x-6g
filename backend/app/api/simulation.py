@@ -2,9 +2,9 @@
 simulation.py — /api/simulation endpoints
 """
 
+import asyncio
 import time
 import logging
-from typing import Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,38 +44,59 @@ async def get_status():
     return sim_service.get_status()
 
 
-@router.post("/start")
+@router.post("/start", status_code=202)
 async def start_simulation(
     req: SimulationStartRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Start or restart a simulation run."""
+    """Start or restart a simulation run.
+    Returns 202 immediately. Heavy ML + SUMO init runs in a thread pool.
+    """
+    now = time.time()
+    if sim_service.status == "running":
+        return {
+            "status": sim_service.status,
+            "message": "Simulation is already running.",
+        }
+    if sim_service.status == "starting" and (now - (sim_service.started_at or 0)) < 15:
+        return {
+            "status": sim_service.status,
+            "message": "Simulation is already starting. Please wait...",
+        }
+
     try:
         run_id = await _create_run_record(db, req.scenario, req.num_vehicles or 21)
-        sim_service.start(
-            scenario=req.scenario,
-            num_vehicles=req.num_vehicles,
-            duration_steps=req.duration_steps or 600,
-            speed_multiplier=req.speed_multiplier or 1.0,
-            run_id=run_id,
-            ai_mode=req.ai_mode or "marl",
-            use_sumo=req.use_sumo if req.use_sumo is not None else True,
-            gui=req.gui if req.gui is not None else True,
+
+        # Capture the running event loop NOW (while we're on it) so the
+        # background thread can schedule the step loop back onto it.
+        loop = asyncio.get_event_loop()
+        sim_service._main_loop = loop
+        sim_service.status = "starting"   # optimistic — prevents double-click
+
+        loop.run_in_executor(
+            None,
+            lambda: sim_service.start(
+                scenario=req.scenario,
+                num_vehicles=req.num_vehicles,
+                duration_steps=req.duration_steps or 600,
+                speed_multiplier=req.speed_multiplier or 1.0,
+                run_id=run_id,
+                ai_mode=req.ai_mode or "marl",
+                use_sumo=req.use_sumo if req.use_sumo is not None else True,
+                gui=req.gui if req.gui is not None else True,
+            )
         )
+
         return {
-            "status": "running",
+            "status": "starting",
             "run_id": run_id,
             "scenario": req.scenario,
-            "message": "Simulation started successfully."
+            "message": "Simulation initialising — watch WebSocket for live state.",
         }
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.exception("Failed to start simulation")
+        logger.exception("Failed to queue simulation start")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.post("/pause")

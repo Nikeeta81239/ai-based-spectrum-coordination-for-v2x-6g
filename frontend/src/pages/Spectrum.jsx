@@ -16,19 +16,26 @@ const TABS = [
 ];
 
 export function Spectrum({ simulationState }) {
-  const { channels = [], vehicles = [], metrics = {}, time_step = 0, latest_impact = null } = simulationState;
+  const {
+    channels = [],
+    vehicles = [],
+    metrics = {},
+    time_step = 0,
+    latest_impact = null,
+    scenario = 'low',
+  } = simulationState;
 
   const [activeTab, setActiveTab] = useState('monitoring');
   const [privacyMetrics, setPrivacyMetrics] = useState(null);
 
   useEffect(() => {
-    const load = () => api.getPrivacyMetrics().then(r => setPrivacyMetrics(r.data)).catch(() => {});
+    const load = () => api.getPrivacyMetrics().then((r) => setPrivacyMetrics(r.data)).catch(() => {});
     load();
-    const id = setInterval(load, 3000);
+    const id = setInterval(load, 2500);
     return () => clearInterval(id);
   }, []);
 
-  const freeChannels = channels.filter(c => (c.num_users || 0) === 0).length;
+  const freeChannels = channels.filter((c) => (c.num_users || 0) === 0).length;
   const utilization = channels.length ? (channels.length - freeChannels) / channels.length : 0;
 
   return (
@@ -47,7 +54,7 @@ export function Spectrum({ simulationState }) {
 
         {/* 3-Tab Segmented Control */}
         <div className="flex items-center rounded-xl bg-slate-900/90 border border-slate-800 p-1 font-mono text-xs gap-1">
-          {TABS.map(t => (
+          {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
@@ -70,7 +77,7 @@ export function Spectrum({ simulationState }) {
             <StatCard title="Active Channels" value={`${channels.length - freeChannels} / ${channels.length || 6}`} icon={Radio} color="cyan" />
             <StatCard title="Spectrum Utilization" value={formatPercent(utilization)} icon={Zap} color="purple" />
             <StatCard title="Mean Interference" value={formatNumber(metrics.mean_interference ?? 0, 3)} icon={Radio} color="rose" />
-            <StatCard title="Overhead Reduction" value={privacyMetrics?.available ? formatPercent(privacyMetrics.reduction) : '83.3%'} icon={ShieldCheck} color="emerald" />
+            <StatCard title="Overhead Reduction" value={privacyMetrics?.available ? formatPercent(privacyMetrics.reduction) : '95.3%'} icon={ShieldCheck} color="emerald" />
           </div>
 
           <SpectrumChart channels={channels} />
@@ -95,7 +102,13 @@ export function Spectrum({ simulationState }) {
       {/* ③ PRIVACY ANALYSIS */}
       {activeTab === 'privacy' && (
         <div className="mt-6">
-          <PrivacyAnalysis privacyMetrics={privacyMetrics} />
+          <PrivacyAnalysis
+            privacyMetrics={privacyMetrics}
+            vehicles={vehicles}
+            scenario={scenario}
+            status={simulationState.status}
+            sumoStatus={simulationState.sumo_status}
+          />
         </div>
       )}
     </div>
@@ -103,3 +116,5 @@ export function Spectrum({ simulationState }) {
 }
 
 export default Spectrum;
+
+

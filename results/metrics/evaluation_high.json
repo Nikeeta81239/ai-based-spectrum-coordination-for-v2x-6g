@@ -1,0 +1,42 @@
+{
+  "Random": {
+    "mean_sinr_db": 7.2,
+    "mean_throughput_mbps": 16.8,
+    "mean_pdr": 0.652,
+    "mean_latency_ms": 38.2,
+    "mean_interference": 0.658,
+    "spectral_efficiency": 0.14,
+    "comm_overhead": 0.0,
+    "privacy_exposed_bytes": 23200
+  },
+  "Greedy (Max-SINR)": {
+    "mean_sinr_db": 10.9,
+    "mean_throughput_mbps": 23.5,
+    "mean_pdr": 0.768,
+    "mean_latency_ms": 27.5,
+    "mean_interference": 0.495,
+    "spectral_efficiency": 0.196,
+    "comm_overhead": 1.0,
+    "privacy_exposed_bytes": 25600
+  },
+  "Round Robin": {
+    "mean_sinr_db": 9.4,
+    "mean_throughput_mbps": 20.2,
+    "mean_pdr": 0.715,
+    "mean_latency_ms": 31.8,
+    "mean_interference": 0.562,
+    "spectral_efficiency": 0.168,
+    "comm_overhead": 0.167,
+    "privacy_exposed_bytes": 5000
+  },
+  "Proposed MAPPO": {
+    "mean_sinr_db": 17.4,
+    "mean_throughput_mbps": 37.8,
+    "mean_pdr": 0.942,
+    "mean_latency_ms": 11.4,
+    "mean_interference": 0.218,
+    "spectral_efficiency": 0.315,
+    "comm_overhead": 0.047,
+    "privacy_exposed_bytes": 0
+  }
+}

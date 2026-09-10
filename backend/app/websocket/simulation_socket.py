@@ -17,26 +17,33 @@ router = APIRouter(tags=["websocket"])
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
+        self._locks: dict[WebSocket, asyncio.Lock] = {}
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        self._locks[websocket] = asyncio.Lock()
         logger.info(f"[WS] Client connected. Total: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-            logger.info(f"[WS] Client disconnected. Total: {len(self.active_connections)}")
+        self._locks.pop(websocket, None)
+        logger.info(f"[WS] Client disconnected. Total: {len(self.active_connections)}")
+
+    async def send_message(self, websocket: WebSocket, message: dict):
+        lock = self._locks.get(websocket)
+        if not lock:
+            return
+        async with lock:
+            try:
+                await websocket.send_json(message)
+            except Exception:
+                self.disconnect(websocket)
 
     async def broadcast(self, message: dict):
-        dead_connections = []
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception:
-                dead_connections.append(connection)
-        for dead in dead_connections:
-            self.disconnect(dead)
+        for connection in list(self.active_connections):
+            await self.send_message(connection, message)
 
 
 manager = ConnectionManager()
@@ -48,7 +55,7 @@ async def websocket_simulation(websocket: WebSocket):
     try:
         # Send initial snapshot immediately upon connect
         snapshot = sim_service.get_current_snapshot()
-        await websocket.send_json({
+        await manager.send_message(websocket, {
             "type": "status",
             "status": sim_service.status,
             "data": snapshot,
@@ -80,21 +87,20 @@ async def websocket_simulation(websocket: WebSocket):
                     sim_service.set_speed(cmd.get("speed", 1.0))
 
                 # Immediately notify status change
-                await websocket.send_json({
+                await manager.send_message(websocket, {
                     "type": "status",
                     "status": sim_service.status,
                     "data": sim_service.get_current_snapshot(),
                     "timestamp": time.time(),
                 })
             except asyncio.TimeoutError:
-                # Periodic keepalive status ping
-                if sim_service.status != "running":
-                    await websocket.send_json({
-                        "type": "status",
-                        "status": sim_service.status,
-                        "data": sim_service.get_current_snapshot(),
-                        "timestamp": time.time(),
-                    })
+                # Periodic keepalive — always send current status to client
+                await manager.send_message(websocket, {
+                    "type": "status",
+                    "status": sim_service.status,
+                    "data": sim_service.get_current_snapshot(),
+                    "timestamp": time.time(),
+                })
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception as e:

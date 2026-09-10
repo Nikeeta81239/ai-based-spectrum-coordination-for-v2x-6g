@@ -17,14 +17,45 @@ export function useSimulation() {
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
+  const syncStatus = useCallback(() => {
+    api.getSimulationStatus()
+      .then((res) => {
+        if (res.data?.status) setStatus(res.data.status);
+        if (res.data?.speed_multiplier) setSpeedState(res.data.speed_multiplier);
+      })
+      .catch(() => {});
+
+    api.getCurrentSimulation()
+      .then((res) => {
+        if (res.data && res.data.vehicles && res.data.vehicles.length > 0) {
+          setSimulationState(res.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const connectWebSocket = useCallback(() => {
     try {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+
+      // Close existing socket if in bad state
+      if (wsRef.current) {
+        if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+          return; // Already active
+        }
+        try { wsRef.current.close(); } catch (_) {}
+      }
+
       const wsUrl = (import.meta.env.VITE_WS_URL || 'ws://localhost:8000') + '/ws/simulation';
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
         setIsConnected(true);
+        syncStatus();
       };
 
       ws.onmessage = (event) => {
@@ -34,7 +65,9 @@ export function useSimulation() {
             setSimulationState(msg.data);
             setStatus('running');
           } else if (msg.type === 'status') {
-            setStatus(msg.status);
+            if (['running', 'paused', 'stopped', 'completed', 'idle', 'starting'].includes(msg.status)) {
+              setStatus(msg.status);
+            }
             if (msg.data && msg.data.vehicles && msg.data.vehicles.length > 0) {
               setSimulationState(msg.data);
             }
@@ -46,44 +79,58 @@ export function useSimulation() {
 
       ws.onclose = () => {
         setIsConnected(false);
-        // Automatic reconnection attempt after 2s
+        // Automatic reconnection attempt after 1.5s
         reconnectTimeoutRef.current = setTimeout(() => {
           connectWebSocket();
-        }, 2000);
+        }, 1500);
       };
 
       ws.onerror = () => {
-        // Silent error to prevent UI noise during reconnects
+        setIsConnected(false);
+        try { ws.close(); } catch (_) {}
       };
     } catch (e) {
       console.warn("WebSocket init error:", e);
+      setIsConnected(false);
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connectWebSocket();
+      }, 2000);
     }
-  }, []);
+  }, [syncStatus]);
 
   useEffect(() => {
     // Initial fetch of current status and snapshot
-    api.getSimulationStatus()
-      .then((res) => {
-        setStatus(res.data.status || 'idle');
-        if (res.data.speed_multiplier) setSpeedState(res.data.speed_multiplier);
-      })
-      .catch((err) => console.error("Error fetching simulation status:", err));
-
-    api.getCurrentSimulation()
-      .then((res) => {
-        if (res.data && res.data.vehicles) {
-          setSimulationState(res.data);
-        }
-      })
-      .catch(() => {});
-
+    syncStatus();
     connectWebSocket();
+
+    // Re-check and reconnect when laptop wakes up from sleep or user switches tabs back
+    const handleWakeOrFocus = () => {
+      syncStatus();
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        connectWebSocket();
+      }
+    };
+
+    window.addEventListener('focus', handleWakeOrFocus);
+    window.addEventListener('online', handleWakeOrFocus);
+    document.addEventListener('visibilitychange', handleWakeOrFocus);
+
+    // Watchdog interval: if socket got dropped during sleep, recover automatically
+    const watchdogInterval = setInterval(() => {
+      if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+        connectWebSocket();
+      }
+    }, 4000);
 
     return () => {
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      clearInterval(watchdogInterval);
+      window.removeEventListener('focus', handleWakeOrFocus);
+      window.removeEventListener('online', handleWakeOrFocus);
+      document.removeEventListener('visibilitychange', handleWakeOrFocus);
       if (wsRef.current) wsRef.current.close();
     };
-  }, [connectWebSocket]);
+  }, [connectWebSocket, syncStatus]);
 
   const sendWsCommand = (cmd) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -100,6 +147,8 @@ export function useSimulation() {
     useSumo = true,
     gui = true
   ) => {
+    // Optimistic update — button reacts instantly, SUMO loads in background
+    setStatus('starting');
     try {
       const res = await api.startSimulation({
         scenario,
@@ -110,34 +159,46 @@ export function useSimulation() {
         use_sumo: useSumo,
         gui: gui,
       });
-      setStatus('running');
+
+      // Safety timeout: if still 'starting' after 20s, sync status from backend so UI is never stuck
+      setTimeout(() => {
+        api.getSimulationStatus().then((s) => {
+          if (s.data?.status && s.data.status !== 'starting') {
+            setStatus(s.data.status);
+          }
+        }).catch(() => {});
+      }, 20000);
+
       return res.data;
     } catch (err) {
-      console.warn("Simulation start notice:", err.message);
+      setStatus('idle'); // revert only on hard failure
+      console.warn("Simulation start error:", err.message);
     }
   };
 
   const pauseSimulation = async () => {
+    setStatus('paused'); // instant feedback
     try {
       await api.pauseSimulation();
-      setStatus('paused');
     } catch (err) {
+      setStatus('running'); // revert on failure
       console.error("Pause failed:", err);
     }
   };
 
   const resumeSimulation = async () => {
+    setStatus('running'); // instant feedback
     try {
       await api.resumeSimulation();
-      setStatus('running');
     } catch (err) {
+      setStatus('paused'); // revert on failure
       console.error("Resume failed:", err);
     }
   };
 
   const setSimulationSpeed = async (multiplier) => {
+    setSpeedState(multiplier); // instant feedback
     try {
-      setSpeedState(multiplier);
       await api.setSimulationSpeed(multiplier);
     } catch (err) {
       console.error("Speed change failed:", err);
@@ -154,19 +215,21 @@ export function useSimulation() {
   };
 
   const stopSimulation = async () => {
+    setStatus('stopped'); // instant feedback
     try {
       await api.stopSimulation();
-      setStatus('stopped');
+      syncStatus();
     } catch (err) {
       console.error("Stop simulation failed:", err);
     }
   };
 
   const resetSimulation = async () => {
+    setStatus('idle'); // instant feedback
+    setSimulationState({ time_step: 0, num_vehicles: 0, vehicles: [], channels: [], metrics: {} });
     try {
       await api.resetSimulation();
-      setStatus('idle');
-      setSimulationState({ time_step: 0, num_vehicles: 0, vehicles: [], channels: [], metrics: {} });
+      syncStatus();
     } catch (err) {
       console.error("Reset simulation failed:", err);
     }

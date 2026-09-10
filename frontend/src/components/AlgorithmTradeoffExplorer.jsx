@@ -7,37 +7,80 @@ export function AlgorithmTradeoffExplorer({ resultsData = null }) {
   const [algB, setAlgB] = useState('greedy');
 
   const methodsData = resultsData || {
-    proposed: { mean_latency_ms: 8.7, mean_pdr: 0.981, mean_sinr_db: 22.4, mean_throughput_mbps: 18.5, mean_interference: 0.18 },
-    greedy: { mean_latency_ms: 15.2, mean_pdr: 0.924, mean_sinr_db: 18.1, mean_throughput_mbps: 14.2, mean_interference: 0.42 },
-    random: { mean_latency_ms: 41.2, mean_pdr: 0.046, mean_sinr_db: -28.4, mean_throughput_mbps: 1.4, mean_interference: 0.71 },
-    round_robin: { mean_latency_ms: 41.3, mean_pdr: 0.040, mean_sinr_db: -29.7, mean_throughput_mbps: 1.2, mean_interference: 0.74 },
+    proposed: { mean_latency_ms: 6.8, mean_pdr: 0.988, mean_sinr_db: 21.34, mean_throughput_mbps: 44.8, mean_interference: 0.122 },
+    greedy: { mean_latency_ms: 14.2, mean_pdr: 0.895, mean_sinr_db: 14.85, mean_throughput_mbps: 32.1, mean_interference: 0.298 },
+    random: { mean_latency_ms: 19.8, mean_pdr: 0.812, mean_sinr_db: 11.42, mean_throughput_mbps: 24.6, mean_interference: 0.421 },
+    round_robin: { mean_latency_ms: 16.5, mean_pdr: 0.854, mean_sinr_db: 13.10, mean_throughput_mbps: 28.4, mean_interference: 0.354 },
   };
 
   const getAlgData = (key) => {
+    if (!methodsData) return { mean_latency_ms: 0, mean_pdr: 0, mean_sinr_db: 0, mean_throughput_mbps: 0, mean_interference: 0 };
     if (methodsData[key]) return methodsData[key];
-    const altKeys = {
-      'proposed': 'Proposed AI',
-      'greedy': 'Greedy',
-      'random': 'Random',
-      'round_robin': 'Round Robin'
-    };
-    if (methodsData[altKeys[key]]) return methodsData[altKeys[key]];
-    return methodsData.proposed || methodsData['Proposed AI'] || {
-      mean_latency_ms: 0, mean_pdr: 0, mean_sinr_db: 0, mean_throughput_mbps: 0, mean_interference: 0
-    };
+
+    const norm = (s) => String(s).toLowerCase().replace(/[^a-z]/g, '');
+    const target = norm(key);
+
+    for (const [k, v] of Object.entries(methodsData)) {
+      const cur = norm(k);
+      if (cur === target) return v;
+      if (target === 'proposed' && (cur.includes('proposed') || cur.includes('mappo') || cur.includes('marl') || cur.includes('ai'))) return v;
+      if (target === 'greedy' && cur.includes('greedy')) return v;
+      if (target === 'random' && cur.includes('random')) return v;
+      if (target.includes('round') && cur.includes('round')) return v;
+    }
+
+    return (
+      methodsData['Proposed MAPPO'] ||
+      methodsData['proposed'] ||
+      methodsData['Proposed AI'] || {
+        mean_latency_ms: 0,
+        mean_pdr: 0,
+        mean_sinr_db: 0,
+        mean_throughput_mbps: 0,
+        mean_interference: 0,
+      }
+    );
   };
 
   const dataA = getAlgData(algA);
   const dataB = getAlgData(algB);
 
-  const getLabel = (k) => (k === 'proposed' ? 'MARL (Ours)' : k.toUpperCase());
+  const getLabel = (k) => (k === 'proposed' ? 'MARL (Ours)' : k.replace('_', ' ').toUpperCase());
+
+  const pdrVal = (v) => (v > 1 ? v : v * 100);
+  const interfVal = (v) => (v > 1 ? v : v * 100);
 
   const rows = [
-    { metric: 'Latency (ms)', valA: formatNumber(dataA.mean_latency_ms, 1), valB: formatNumber(dataB.mean_latency_ms, 1), better: dataA.mean_latency_ms < dataB.mean_latency_ms ? getLabel(algA) : getLabel(algB) },
-    { metric: 'PDR (%)', valA: `${formatNumber(dataA.mean_pdr * 100, 1)}%`, valB: `${formatNumber(dataB.mean_pdr * 100, 1)}%`, better: dataA.mean_pdr > dataB.mean_pdr ? getLabel(algA) : getLabel(algB) },
-    { metric: 'SINR (dB)', valA: formatNumber(dataA.mean_sinr_db, 1), valB: formatNumber(dataB.mean_sinr_db, 1), better: dataA.mean_sinr_db > dataB.mean_sinr_db ? getLabel(algA) : getLabel(algB) },
-    { metric: 'Throughput (Mbps)', valA: formatNumber(dataA.mean_throughput_mbps, 1), valB: formatNumber(dataB.mean_throughput_mbps, 1), better: dataA.mean_throughput_mbps > dataB.mean_throughput_mbps ? getLabel(algA) : getLabel(algB) },
-    { metric: 'Interference (%)', valA: `${formatNumber(dataA.mean_interference * 100, 1)}%`, valB: `${formatNumber(dataB.mean_interference * 100, 1)}%`, better: dataA.mean_interference < dataB.mean_interference ? getLabel(algA) : getLabel(algB) },
+    {
+      metric: 'Latency (ms)',
+      valA: `${formatNumber(dataA.mean_latency_ms ?? 0, 1)} ms`,
+      valB: `${formatNumber(dataB.mean_latency_ms ?? 0, 1)} ms`,
+      better: (dataA.mean_latency_ms ?? 999) < (dataB.mean_latency_ms ?? 999) ? getLabel(algA) : getLabel(algB),
+    },
+    {
+      metric: 'PDR Reliability (%)',
+      valA: `${formatNumber(pdrVal(dataA.mean_pdr ?? 0), 1)}%`,
+      valB: `${formatNumber(pdrVal(dataB.mean_pdr ?? 0), 1)}%`,
+      better: (dataA.mean_pdr ?? 0) > (dataB.mean_pdr ?? 0) ? getLabel(algA) : getLabel(algB),
+    },
+    {
+      metric: 'SINR (dB)',
+      valA: `${formatNumber(dataA.mean_sinr_db ?? 0, 1)} dB`,
+      valB: `${formatNumber(dataB.mean_sinr_db ?? 0, 1)} dB`,
+      better: (dataA.mean_sinr_db ?? -999) > (dataB.mean_sinr_db ?? -999) ? getLabel(algA) : getLabel(algB),
+    },
+    {
+      metric: 'Throughput (Mbps)',
+      valA: `${formatNumber(dataA.mean_throughput_mbps ?? 0, 1)} Mbps`,
+      valB: `${formatNumber(dataB.mean_throughput_mbps ?? 0, 1)} Mbps`,
+      better: (dataA.mean_throughput_mbps ?? 0) > (dataB.mean_throughput_mbps ?? 0) ? getLabel(algA) : getLabel(algB),
+    },
+    {
+      metric: 'Interference (%)',
+      valA: `${formatNumber(interfVal(dataA.mean_interference ?? 0), 1)}%`,
+      valB: `${formatNumber(interfVal(dataB.mean_interference ?? 0), 1)}%`,
+      better: (dataA.mean_interference ?? 999) < (dataB.mean_interference ?? 999) ? getLabel(algA) : getLabel(algB),
+    },
   ];
 
   return (

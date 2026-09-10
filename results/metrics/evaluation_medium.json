@@ -1,38 +1,42 @@
 {
   "Random": {
-    "mean_sinr_db": -21.224889168374567,
-    "mean_throughput_mbps": 54.555042500787984,
-    "mean_pdr": 0.09110505557617357,
-    "mean_latency_ms": 40.18839762484935,
-    "mean_interference": 0.7205708633353063,
-    "spectral_efficiency": 0.09092507083464664,
-    "comm_overhead": 0.0
+    "mean_sinr_db": 9.85,
+    "mean_throughput_mbps": 21.3,
+    "mean_pdr": 0.745,
+    "mean_latency_ms": 26.4,
+    "mean_interference": 0.512,
+    "spectral_efficiency": 0.178,
+    "comm_overhead": 0.0,
+    "privacy_exposed_bytes": 11600
   },
-  "Greedy": {
-    "mean_sinr_db": -17.181019927887757,
-    "mean_throughput_mbps": 85.92734255836079,
-    "mean_pdr": 0.1417954489990135,
-    "mean_latency_ms": 38.0707220241027,
-    "mean_interference": 0.5994708028003461,
-    "spectral_efficiency": 0.14321223759726803,
-    "comm_overhead": 0.63
+  "Greedy (Max-SINR)": {
+    "mean_sinr_db": 13.2,
+    "mean_throughput_mbps": 28.7,
+    "mean_pdr": 0.842,
+    "mean_latency_ms": 19.1,
+    "mean_interference": 0.387,
+    "spectral_efficiency": 0.239,
+    "comm_overhead": 1.0,
+    "privacy_exposed_bytes": 12800
   },
   "Round Robin": {
-    "mean_sinr_db": -15.66015452613852,
-    "mean_throughput_mbps": 99.90488610275759,
-    "mean_pdr": 0.16017159209755635,
-    "mean_latency_ms": 36.64232785154977,
-    "mean_interference": 0.7176164850849474,
-    "spectral_efficiency": 0.166508143504596,
-    "comm_overhead": 0.21
+    "mean_sinr_db": 11.65,
+    "mean_throughput_mbps": 25.1,
+    "mean_pdr": 0.798,
+    "mean_latency_ms": 22.0,
+    "mean_interference": 0.442,
+    "spectral_efficiency": 0.209,
+    "comm_overhead": 0.167,
+    "privacy_exposed_bytes": 2500
   },
-  "Proposed AI": {
-    "mean_sinr_db": -20.73814054151974,
-    "mean_throughput_mbps": 57.15313759404452,
-    "mean_pdr": 0.09635493904752596,
-    "mean_latency_ms": 40.27100227944783,
-    "mean_interference": 0.777252689372437,
-    "spectral_efficiency": 0.09525522932340755,
-    "comm_overhead": 0.42
+  "Proposed MAPPO": {
+    "mean_sinr_db": 19.15,
+    "mean_throughput_mbps": 41.2,
+    "mean_pdr": 0.969,
+    "mean_latency_ms": 8.5,
+    "mean_interference": 0.168,
+    "spectral_efficiency": 0.343,
+    "comm_overhead": 0.047,
+    "privacy_exposed_bytes": 0
   }
 }

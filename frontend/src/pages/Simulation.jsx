@@ -12,6 +12,9 @@ import {
   Clock,
   ShieldCheck,
   Layers,
+  ChevronLeft,
+  ChevronRight,
+  Car,
 } from 'lucide-react';
 import { formatNumber, formatPercent, getChannelColor } from '../utils/formatters';
 import { SumoCanvas } from '../components/SumoCanvas';
@@ -46,13 +49,14 @@ export function Simulation({
 
   const [activeTab, setActiveTab] = useState('live');
   const [selectedScenario, setSelectedScenario] = useState('low');
+  const [selectedDuration, setSelectedDuration] = useState(600);
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
   const [guiEnabled, setGuiEnabled] = useState(false);
 
   const selectedVehicle = vehicles.find((v) => v.vehicle_id === selectedVehicleId) || vehicles[0] || null;
 
   const handleStart = () => {
-    startSimulation(selectedScenario, null, 600, speed, 'marl', true, guiEnabled);
+    startSimulation(selectedScenario, null, selectedDuration, speed, 'marl', true, guiEnabled);
   };
 
   const getStatusBadge = () => {
@@ -129,24 +133,49 @@ export function Simulation({
         <div className="space-y-6">
 
           {/* Status bar */}
-          <div className="flex items-center gap-6 text-xs font-mono bg-slate-900/50 px-5 py-3 rounded-xl border border-slate-800 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-cyan-400" />
-              <span className="text-slate-400">Time:</span>
-              <strong className="text-white">{(simulation_time || time_step).toFixed(1)}s</strong>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-6 text-xs font-mono bg-slate-900/50 px-5 py-3 rounded-t-xl border border-slate-800 border-b-0 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-cyan-400" />
+                <span className="text-slate-400">Time:</span>
+                <strong className="text-white">{(simulation_time || time_step).toFixed(1)}s</strong>
+              </div>
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-purple-400" />
+                <span className="text-slate-400">Step:</span>
+                <strong className="text-white">
+                  {sumo_step || time_step}
+                  {status === 'running' || status === 'paused'
+                    ? <span className="text-slate-500"> / {selectedDuration}</span>
+                    : null}
+                </strong>
+              </div>
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-emerald-400" />
+                <span className="text-slate-400">Live Vehicles:</span>
+                <strong className="text-emerald-400">{vehicles.length}</strong>
+              </div>
+              {(status === 'running' || status === 'paused') && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Remaining:</span>
+                  <strong className="text-amber-400">
+                    {Math.max(0, selectedDuration - (sumo_step || time_step))} steps
+                  </strong>
+                </div>
+              )}
+              <div className="ml-auto">{getStatusBadge()}</div>
             </div>
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-purple-400" />
-              <span className="text-slate-400">Step:</span>
-              <strong className="text-white">{sumo_step || time_step}</strong>
-            </div>
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-400" />
-              <span className="text-slate-400">Live Vehicles:</span>
-              <strong className="text-emerald-400">{vehicles.length}</strong>
-            </div>
-            <div className="ml-auto">{getStatusBadge()}</div>
+            {/* Thin progress bar */}
+            {(status === 'running' || status === 'paused') && selectedDuration > 0 && (
+              <div className="w-full h-1.5 bg-slate-800 rounded-b-xl overflow-hidden border border-slate-800 border-t-0">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500"
+                  style={{ width: `${Math.min(100, ((sumo_step || time_step) / selectedDuration) * 100)}%` }}
+                />
+              </div>
+            )}
           </div>
+
 
           {/* Simulation Control */}
           <div className="p-5 rounded-2xl glass-card border border-cyan-500/30 font-mono space-y-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950">
@@ -161,8 +190,8 @@ export function Simulation({
                   <select
                     value={selectedScenario}
                     onChange={(e) => setSelectedScenario(e.target.value)}
-                    disabled={status === 'running' || status === 'paused'}
-                    className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                    disabled={status === 'running' || status === 'paused' || status === 'starting'}
+                    className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-400 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="low">LOW (20 veh)</option>
                     <option value="medium">MEDIUM (50 veh)</option>
@@ -172,13 +201,26 @@ export function Simulation({
                   </select>
                 </div>
 
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-bold uppercase">Duration:</span>
+                  <input
+                    type="number"
+                    min={10}
+                    value={selectedDuration}
+                    onChange={(e) => setSelectedDuration(Math.max(10, Number(e.target.value) || 10))}
+                    disabled={status === 'running' || status === 'paused' || status === 'starting'}
+                    className="w-24 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <span className="text-xs text-slate-500">steps</span>
+                </div>
+
                 <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-700">
                   <input
                     type="checkbox"
                     checked={guiEnabled}
                     onChange={(e) => setGuiEnabled(e.target.checked)}
-                    disabled={status === 'running' || status === 'paused'}
-                    className="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer"
+                    disabled={status === 'running' || status === 'paused' || status === 'starting'}
+                    className="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer disabled:cursor-not-allowed"
                   />
                   <span>Open SUMO-GUI Window</span>
                 </label>
@@ -201,7 +243,13 @@ export function Simulation({
               </div>
 
               <div className="flex items-center gap-2">
-                {status !== 'running' && status !== 'paused' ? (
+                {status === 'starting' ? (
+                  // Pulsing loading state while SUMO + PyTorch initialise
+                  <button disabled className="flex items-center gap-2 px-5 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs cursor-not-allowed animate-pulse">
+                    <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping inline-block" />
+                    STARTING...
+                  </button>
+                ) : status !== 'running' && status !== 'paused' ? (
                   <button onClick={handleStart} className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all hover:scale-105 active:scale-95">
                     <Play className="w-4 h-4 fill-current" /> START
                   </button>
@@ -341,6 +389,102 @@ export function Simulation({
       ══════════════════════════════════════════════════════════════ */}
       {activeTab === 'decisions' && (
         <div className="space-y-6">
+
+          {/* Vehicle Selection Toolbar */}
+          <div className="p-4 rounded-2xl glass-card border border-cyan-500/30 bg-slate-900/70 font-mono space-y-3">
+            <div className="flex justify-between items-center flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <Car className="w-5 h-5 text-cyan-400" />
+                <span className="text-xs text-slate-300 font-bold uppercase tracking-wider">
+                  Inspect Vehicle AI Decision:
+                </span>
+              </div>
+
+              {/* Dropdown & Prev/Next buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    const currentIndex = vehicles.findIndex((v) => v.vehicle_id === selectedVehicle?.vehicle_id);
+                    if (currentIndex > 0) {
+                      setSelectedVehicleId(vehicles[currentIndex - 1].vehicle_id);
+                    } else if (vehicles.length > 0) {
+                      setSelectedVehicleId(vehicles[vehicles.length - 1].vehicle_id);
+                    }
+                  }}
+                  disabled={vehicles.length <= 1}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-700 text-xs flex items-center gap-1 transition-all"
+                  title="Previous vehicle"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Prev
+                </button>
+
+                <select
+                  value={selectedVehicle?.vehicle_id || ''}
+                  onChange={(e) => setSelectedVehicleId(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-950 border border-cyan-500/50 text-xs text-cyan-300 font-bold focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm shadow-cyan-500/10"
+                >
+                  {vehicles.length === 0 ? (
+                    <option value="">No vehicles active</option>
+                  ) : (
+                    vehicles.map((v) => (
+                      <option key={v.vehicle_id} value={v.vehicle_id}>
+                        Vehicle {v.vehicle_id} — Ch {v.selected_channel + 1} ({v.speed_kmh || (v.speed_mps * 3.6).toFixed(1)} km/h, {v.num_neighbours} nbrs)
+                      </option>
+                    ))
+                  )}
+                </select>
+
+                <button
+                  onClick={() => {
+                    const currentIndex = vehicles.findIndex((v) => v.vehicle_id === selectedVehicle?.vehicle_id);
+                    if (currentIndex >= 0 && currentIndex < vehicles.length - 1) {
+                      setSelectedVehicleId(vehicles[currentIndex + 1].vehicle_id);
+                    } else if (vehicles.length > 0) {
+                      setSelectedVehicleId(vehicles[0].vehicle_id);
+                    }
+                  }}
+                  disabled={vehicles.length <= 1}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-700 text-xs flex items-center gap-1 transition-all"
+                  title="Next vehicle"
+                >
+                  Next <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <span className="text-[11px] text-slate-400">
+                {vehicles.length > 0
+                  ? `Viewing Vehicle ${selectedVehicle?.vehicle_id ?? 'none'} (${vehicles.findIndex((v) => v.vehicle_id === selectedVehicle?.vehicle_id) + 1} of ${vehicles.length} active)`
+                  : '0 vehicles active'}
+              </span>
+            </div>
+
+            {/* Quick Vehicle Pills for fast switching */}
+            {vehicles.length > 1 && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-800/80">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wide mr-1">Quick Select:</span>
+                {vehicles.slice(0, 16).map((v) => {
+                  const isSelected = selectedVehicle && selectedVehicle.vehicle_id === v.vehicle_id;
+                  return (
+                    <button
+                      key={v.vehicle_id}
+                      onClick={() => setSelectedVehicleId(v.vehicle_id)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                        isSelected
+                          ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20 scale-105'
+                          : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
+                      }`}
+                    >
+                      Veh {v.vehicle_id}
+                    </button>
+                  );
+                })}
+                {vehicles.length > 16 && (
+                  <span className="text-[10px] text-slate-400">+{vehicles.length - 16} more in dropdown</span>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start font-mono">
 
             {/* Vehicle Inspector (4 cols) */}
@@ -350,11 +494,23 @@ export function Simulation({
                   <Cpu className="w-4 h-4 text-cyan-400" />
                   Vehicle Inspector
                 </h3>
-                {selectedVehicle && (
+                {vehicles.length > 0 ? (
+                  <select
+                    value={selectedVehicle?.vehicle_id || ''}
+                    onChange={(e) => setSelectedVehicleId(e.target.value)}
+                    className="text-[11px] bg-cyan-950 text-cyan-300 px-2.5 py-0.5 rounded border border-cyan-500/40 font-bold focus:outline-none cursor-pointer"
+                  >
+                    {vehicles.map((v) => (
+                      <option key={v.vehicle_id} value={v.vehicle_id}>
+                        Veh {v.vehicle_id}
+                      </option>
+                    ))}
+                  </select>
+                ) : selectedVehicle ? (
                   <span className="text-[10px] bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 font-bold">
                     {selectedVehicle.vehicle_id}
                   </span>
-                )}
+                ) : null}
               </div>
 
               {selectedVehicle ? (
@@ -426,9 +582,26 @@ export function Simulation({
                   <Cpu className="w-4 h-4 text-purple-400" />
                   AI Spectrum Decision Pipeline
                 </h3>
-                <span className="text-xs font-bold text-cyan-300 bg-cyan-950/60 px-3 py-1 rounded-full border border-cyan-500/30">
-                  {selectedVehicle ? `${selectedVehicle.vehicle_id} — Decision Execution` : 'System Pipeline Overview'}
-                </span>
+                {vehicles.length > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400">Agent:</span>
+                    <select
+                      value={selectedVehicle?.vehicle_id || ''}
+                      onChange={(e) => setSelectedVehicleId(e.target.value)}
+                      className="text-xs font-bold text-cyan-300 bg-cyan-950/80 px-3 py-1 rounded-full border border-cyan-500/40 focus:outline-none cursor-pointer"
+                    >
+                      {vehicles.map((v) => (
+                        <option key={v.vehicle_id} value={v.vehicle_id}>
+                          Vehicle {v.vehicle_id} — Decision Execution
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <span className="text-xs font-bold text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
+                    System Pipeline Overview
+                  </span>
+                )}
               </div>
 
               {/* 7-Step Pipeline */}
