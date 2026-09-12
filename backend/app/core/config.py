@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     METRICS_DIR: str = Field(default="results/metrics", env="METRICS_DIR")
     LOGS_DIR: str = Field(default="results/logs", env="LOGS_DIR")
 
+    # ── Gemini AI ─────────────────────────────────────────────────────────
+    GEMINI_API_KEY: str = Field(default="", env="GEMINI_API_KEY")
+
     # ── CORS ──────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: list = ["http://localhost:5173", "http://localhost:3000",
                              "http://127.0.0.1:5173"]

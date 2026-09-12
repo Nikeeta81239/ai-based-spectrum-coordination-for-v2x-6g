@@ -2,22 +2,30 @@ import React from 'react';
 import { History, ArrowDown, Zap, Activity } from 'lucide-react';
 
 export function SpectrumDecisionReplay({ timeStep = 0, latestImpact = null }) {
+  let decisionText = 'Veh 24: CH2 → CH5';
+  if (latestImpact?.decision) {
+    decisionText = latestImpact.decision;
+    if (/^\d+\s*→/.test(decisionText)) {
+      decisionText = `Veh ${decisionText}`;
+    }
+  }
+
   const replaySteps = [
     { time: `t=${Math.max(1, timeStep - 3)}s`, text: 'CH2 → Overloaded (High Co-Channel Interference)' },
-    { time: `t=${Math.max(1, timeStep - 2)}s`, text: 'MARL detects channel contention' },
-    { time: `t=${Math.max(1, timeStep - 1)}s`, text: latestImpact ? latestImpact.decision : 'V24: CH2 → CH5' },
-    { time: `t=${timeStep}s`, text: 'CH2 utilization ↓ | Vehicle SINR ↑ (+4.2 dB)' },
+    { time: `t=${Math.max(1, timeStep - 2)}s`, text: 'MARL AI detects spectrum contention' },
+    { time: `t=${Math.max(1, timeStep - 1)}s`, text: decisionText },
+    { time: `t=${timeStep}s`, text: 'CH2 contention drops | Vehicle SINR improves (+4.2 dB)' },
   ];
 
   return (
     <div className="p-5 rounded-2xl glass-card border border-purple-500/30 font-mono space-y-4 shadow-xl">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
           <History className="w-4 h-4 text-purple-400" />
           SPECTRUM DECISION REPLAY (NETWORK-LEVEL EVOLUTION)
         </h3>
         <span className="text-[10px] text-purple-300 bg-purple-950/60 px-2.5 py-1 rounded-full border border-purple-500/30">
-          GLOBAL STATE TRANSITIONS
+          AI CHANNEL HANDOVER EVENT
         </span>
       </div>
 
@@ -38,6 +46,10 @@ export function SpectrumDecisionReplay({ timeStep = 0, latestImpact = null }) {
           </div>
         ))}
       </div>
+
+      <p className="text-[11px] text-slate-400 font-sans border-t border-slate-800/80 pt-2">
+        <strong className="text-purple-300 font-mono">Why this is needed:</strong> When multiple vehicles overcrowd a channel, the MARL policy autonomously moves vehicles (e.g. Veh 98) to an underutilised channel, instantly eliminating radio interference without centralized cellular bottlenecks.
+      </p>
     </div>
   );
 }

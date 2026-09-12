@@ -12,7 +12,7 @@ export function AttentionHeatmap({ attention = null, embedded = false }) {
       color: 'bg-cyan-500',
       barColor: '#06b6d4',
       badgeColor: 'text-cyan-400 border-cyan-500/30 bg-cyan-950/40',
-      description: 'Weights spatial proximity, neighbor velocity differential, and local vehicle density (250m radius).',
+      description: 'Nearby vehicles and distance.',
     },
     {
       label: 'Temporal Attention',
@@ -21,7 +21,7 @@ export function AttentionHeatmap({ attention = null, embedded = false }) {
       color: 'bg-purple-500',
       barColor: '#8b5cf6',
       badgeColor: 'text-purple-400 border-purple-500/30 bg-purple-950/40',
-      description: 'Models trajectory acceleration, time-series speed variance, and previous channel retention.',
+      description: 'Vehicle movement and previous observations.',
     },
     {
       label: 'Application Attention',
@@ -30,7 +30,7 @@ export function AttentionHeatmap({ attention = null, embedded = false }) {
       color: 'bg-amber-500',
       barColor: '#f59e0b',
       badgeColor: 'text-amber-400 border-amber-500/30 bg-amber-950/40',
-      description: 'Prioritizes safety-critical URLLC packets (collision alert) over best-effort infotainment data.',
+      description: 'Communication priority and packet requirements.',
     },
     {
       label: 'Frequency Attention',
@@ -39,7 +39,7 @@ export function AttentionHeatmap({ attention = null, embedded = false }) {
       color: 'bg-emerald-500',
       barColor: '#10b981',
       badgeColor: 'text-emerald-400 border-emerald-500/30 bg-emerald-950/40',
-      description: 'Evaluates subchannel interference noise, contention levels, and SINR headroom across mmWave bands.',
+      description: 'Channel interference and spectrum conditions.',
     },
   ];
 

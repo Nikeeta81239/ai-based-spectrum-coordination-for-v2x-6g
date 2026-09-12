@@ -9,8 +9,12 @@ export function GeminiResearchAssistantCard({ vehicleId = 'veh_024', evidence = 
   const sinr = evidence?.sinr_db !== undefined ? evidence.sinr_db : 21.4;
   const appType = evidence?.app_type || 'Safety URLLC';
 
-  const simpleExplanation = assistantData?.explanation || `Vehicle ${vehicleId} selected ${chLabel} because it currently provides better, lower-noise communication conditions for this vehicle.`;
-  const technicalExplanation = `Vehicle ${vehicleId} selected ${chLabel} primarily because its ${appType} application requires reliable low-latency communication. The channel exhibits low measured interference (${interf}) and strong SINR (${sinr} dB). Frequency and application information were the strongest neural attention signals.`;
+  const simpleExplanation =
+    assistantData?.explanation ||
+    `Vehicle ${vehicleId} selected ${chLabel} because it currently provides better, lower-noise communication conditions for this vehicle.`;
+  const technicalExplanation =
+    assistantData?.explanation ||
+    `Vehicle ${vehicleId} selected ${chLabel} — its ${appType} application requires reliable low-latency communication. The channel exhibits low measured interference (${interf}) and strong SINR (${sinr} dB), making it the optimal spectrum allocation given current wireless environment conditions.`;
 
   return (
     <div className="p-5 rounded-2xl glass-card border border-purple-500/40 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-purple-950/30 font-mono space-y-4 shadow-xl relative overflow-hidden">

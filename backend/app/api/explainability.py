@@ -59,7 +59,22 @@ async def get_explanation(vehicle_id: str):
             log = get_decision_log()
             for entry in reversed(log):
                 if entry.get("vehicle_id") == vehicle_id:
-                    return {**entry, "timestamp": float(time.time()), "source": "log"}
+                    vehicle_data = {
+                        "vehicle_id": vehicle_id,
+                        "selected_channel": entry.get("selected_channel", 0),
+                        "interference": entry.get("interference", 0.2),
+                        "sinr_db": entry.get("sinr_db", 21.0),
+                        "pdr": entry.get("pdr", 0.98),
+                        "speed_mps": entry.get("speed_mps", 12.0),
+                        "latency_ms": entry.get("latency_ms", 5.0),
+                        "throughput_mbps": entry.get("throughput_mbps", 18.0),
+                        "app_type": entry.get("app_type", "normal"),
+                        "traffic_density": entry.get("traffic_density", 0.3),
+                        "num_neighbours": entry.get("num_neighbours", 4),
+                        "attention": entry.get("attention", {}),
+                    }
+                    source = "log"
+                    break
             
             # 3. Fallback to representative vehicle state so XAI UI always works
             vehicle_data = _build_synthetic_vehicle(vehicle_id)

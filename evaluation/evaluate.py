@@ -17,6 +17,10 @@ Run:
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import numpy as np
 import json
@@ -95,7 +99,7 @@ def evaluate(scenario: str = DEFAULT_SCENARIO, csv_path: str = None):
     os.makedirs(METRICS_DIR, exist_ok=True)
 
     print(f"\n{'='*60}")
-    print(f"  Evaluation — Scenario: {scenario}")
+    print(f"  Evaluation - Scenario: {scenario}")
     print(f"{'='*60}")
 
     # ── Baselines ──
@@ -142,20 +146,20 @@ def evaluate(scenario: str = DEFAULT_SCENARIO, csv_path: str = None):
     ]
     header = f"{'Metric':<30}" + "".join(f"{k:>15}" for k in results)
     print(header)
-    print("─" * 80)
+    print("-" * 80)
     for mkey, mlabel in metrics_to_show:
         row = f"{mlabel:<30}"
         for system in results:
             val = results[system].get(mkey, 0)
             row += f"{val:>15.4f}"
         print(row)
-    print(f"{'─'*80}\n")
+    print(f"{'-'*80}\n")
 
-    # ── Save results ──
+    # -- Save results --
     out_path = os.path.join(METRICS_DIR, f"evaluation_{scenario}.json")
-    with open(out_path, "w") as f:
+    with open(out_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
-    print(f"[Evaluate] Results saved → {out_path}")
+    print(f"[Evaluate] Results saved -> {out_path}")
 
     # ── Generate Graphs ──
     _generate_comparison_graphs(results, scenario)

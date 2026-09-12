@@ -15,6 +15,10 @@ Run:
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import numpy as np
 import json
@@ -31,11 +35,11 @@ from training.config import (
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None, use_curriculum: bool = False):
+# -----------------------------------------------------------------------------
+def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None, use_curriculum: bool = False, step_callback = None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"\n{'='*65}")
-    print(f"  AI-Based Spectrum Coordination — MAPPO Training Pipeline")
+    print(f"  AI-Based Spectrum Coordination - MAPPO Training Pipeline")
     print(f"  Algorithm : MAPPO (Multi-Agent PPO) + 4-Head Attention + Local Critic")
     print(f"  Masking   : Action Masking Active (Interference Threshold: 0.75)")
     print(f"  Curriculum: {'ENABLED (20 -> 50 -> 100 -> 200 -> 300)' if use_curriculum else 'OFF (' + scenario + ')'}")
@@ -124,6 +128,12 @@ def train(scenario: str = DEFAULT_SCENARIO, csv_path: str = None, use_curriculum
             "gc_loss":         float(np.mean(ep_losses["global_critic"])) if ep_losses["global_critic"] else 0,
         }
         episode_metrics.append(ep_metric)
+
+        if step_callback:
+            try:
+                step_callback(episode, episodes_to_run, ep_metric)
+            except Exception:
+                pass
 
         # Handle Curriculum Progression
         if use_curriculum:

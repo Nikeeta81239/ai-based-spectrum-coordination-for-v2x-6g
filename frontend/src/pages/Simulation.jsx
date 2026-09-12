@@ -525,6 +525,15 @@ export function Simulation({
                     <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
                       <div className="text-[10px] text-slate-400 uppercase">Neighbors</div>
                       <div className="font-bold text-purple-400 text-sm mt-0.5">{selectedVehicle.num_neighbours} vehicles</div>
+                      {selectedVehicle.neighboring_vehicles && selectedVehicle.neighboring_vehicles.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {selectedVehicle.neighboring_vehicles.map((nid) => (
+                            <span key={nid} className="px-1.5 py-0.5 rounded bg-purple-950/60 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
+                              {nid}
+                            </span>
+                          ))}  
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -559,7 +568,7 @@ export function Simulation({
 
                   <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span>Exact coordinates kept local. Ephemeral session ID used over air.</span>
+                    <span>GPS location stays on this vehicle. Only a temporary ID is shared over the air - your real identity is never broadcast.</span>
                   </div>
                 </div>
               ) : (

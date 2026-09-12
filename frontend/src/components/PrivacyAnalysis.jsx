@@ -41,7 +41,7 @@ export function PrivacyAnalysis({
   const isSumoRunning = (sumoStatus === 'CONNECTED' || status === 'running' || status === 'paused') && numVehicles > 0;
   const isTelemetryAvailable = Boolean(privacyMetrics?.available) || (numVehicles > 0 && privacyMetrics != null);
 
-  // Scenario formatting
+  // Scenario formatting with dynamic vehicle-count fallback
   const scenarioLabels = {
     low: 'Low',
     medium: 'Medium',
@@ -49,7 +49,14 @@ export function PrivacyAnalysis({
     very_high: 'Very High',
     congestion: 'Congestion',
   };
-  const scenarioName = scenarioLabels[scenario?.toLowerCase()] || (scenario ? scenario.toUpperCase() : 'Low');
+  let resolvedKey = scenario?.toLowerCase();
+  if ((!resolvedKey || resolvedKey === 'low') && numVehicles > 30) {
+    if (numVehicles >= 250) resolvedKey = 'congestion';
+    else if (numVehicles >= 150) resolvedKey = 'very_high';
+    else if (numVehicles >= 60) resolvedKey = 'high';
+    else resolvedKey = 'medium';
+  }
+  const scenarioName = scenarioLabels[resolvedKey] || (resolvedKey ? resolvedKey.toUpperCase() : 'Low');
 
   // Sizing standard from PrivacyGateway (3GPP Rel-17 V2X specification):
   // 1. Sensitive data generated per vehicle: GPS (16B) + Speed/accel (8B) + Route (64B) + VIN (16B) + Sensors (128B) = 232 B

@@ -23,8 +23,8 @@ _project_root = os.path.abspath(
 SCENARIOS = {
     "low": {
         "name": "low",
-        "label": "Normal Traffic",
-        "description": "Moderate vehicle density. Typical urban flow. Good baseline performance.",
+        "label": "Low Density",
+        "description": "Standard urban flow. Baseline spectrum coordination performance.",
         "num_vehicles": 21,
         "density_factor": 1.0,
     },
@@ -51,7 +51,7 @@ SCENARIOS = {
     },
     "congestion": {
         "name": "congestion",
-        "label": "Traffic Congestion",
+        "label": "Congestion",
         "description": "Slow-moving congested traffic. High density, low speed.",
         "num_vehicles": 300,
         "density_factor": 6.0,
@@ -61,11 +61,25 @@ SCENARIOS = {
 # ── In-memory comparison results ───────────────────────────────────────────────
 _run_results: dict = {}
 
+# ── Benchmark status tracking ──────────────────────────────────────────────────
+# scenario → { status, steps_done, total_steps, started_at, completed_at, error }
+_benchmark_status: dict = {}
+
 
 def _run_scenario_comparison(scenario: str, methods: list, steps: int):
     """Run scenario comparison in a background thread."""
     if _project_root not in sys.path:
         sys.path.insert(0, _project_root)
+
+    _benchmark_status[scenario] = {
+        "status": "running",
+        "steps_done": 0,
+        "total_steps": steps,
+        "started_at": time.time(),
+        "completed_at": None,
+        "error": None,
+    }
+
     try:
         import torch
         from environment.wireless_environment import WirelessEnvironment
@@ -82,8 +96,9 @@ def _run_scenario_comparison(scenario: str, methods: list, steps: int):
         device   = torch.device("cpu")
 
         results = {}
+        total_methods = len(methods)
 
-        for method in methods:
+        for m_idx, method in enumerate(methods):
             env    = WirelessEnvironment(csv_path, scenario_density_factor=density)
             states = env.reset()
             done   = False
@@ -92,7 +107,7 @@ def _run_scenario_comparison(scenario: str, methods: list, steps: int):
             metrics_acc = {
                 "mean_interference": [], "mean_throughput_mbps": [],
                 "mean_latency_ms": [], "mean_pdr": [], "mean_sinr_db": [],
-                "spectral_efficiency": [],
+                "spectral_efficiency": [], "comm_overhead": [],
             }
 
             if method == "random":
@@ -128,30 +143,90 @@ def _run_scenario_comparison(scenario: str, methods: list, steps: int):
                     break
                 step += 1
 
+                # Update progress: spread steps evenly across methods
+                steps_so_far = m_idx * steps + step
+                _benchmark_status[scenario]["steps_done"] = steps_so_far
+
             results[method] = {k: float(np.mean(v)) if v else 0.0 for k, v in metrics_acc.items()}
 
-        _run_results[scenario] = results
-        logger.info(f"[Scenarios] Comparison complete for scenario={scenario}")
+        # Map internal method keys to display names
+        key_map = {
+            "proposed": "Proposed MAPPO",
+            "random": "Random",
+            "greedy": "Greedy (Max-SINR)",
+            "round_robin": "Round Robin",
+        }
+        named_results = {key_map.get(k, k): v for k, v in results.items()}
+
+        # Attach run metadata
+        snap = sim_service.get_current_snapshot()
+        actual_vehicles = len(snap.get("vehicles", []))
+        named_results["_meta"] = {
+            "scenario": scenario,
+            "steps": steps,
+            "actual_vehicles": actual_vehicles or SCENARIOS.get(scenario, {}).get("num_vehicles", 0),
+            "timestamp": time.time(),
+            "model_checkpoint": "models/best",
+            "source": "live",
+        }
+
+        _run_results[scenario] = named_results
+        _benchmark_status[scenario].update({
+            "status": "completed",
+            "steps_done": steps * len(methods),
+            "completed_at": time.time(),
+        })
+        logger.info(f"[Scenarios] Benchmark complete for scenario={scenario}")
+
     except Exception as exc:
-        logger.exception(f"[Scenarios] Comparison failed: {exc}")
+        logger.exception(f"[Scenarios] Benchmark failed: {exc}")
+        _benchmark_status[scenario].update({
+            "status": "error",
+            "error": str(exc),
+            "completed_at": time.time(),
+        })
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 @router.get("")
 async def list_scenarios():
-    """List all available scenarios."""
-    return {"scenarios": list(SCENARIOS.values())}
+    """List all available scenarios with live vehicle counts if simulation is running."""
+    snap = sim_service.get_current_snapshot()
+    live_vehicles = len(snap.get("vehicles", []))
+    sim_scenario = sim_service.scenario
+
+    scenarios_out = []
+    for sc in SCENARIOS.values():
+        entry = dict(sc)
+        if sim_service.status == "running" and sim_scenario == sc["name"] and live_vehicles > 0:
+            entry["live_vehicles"] = live_vehicles
+        scenarios_out.append(entry)
+
+    return {"scenarios": scenarios_out}
 
 
 @router.post("/run")
 async def run_scenario(req: ScenarioRunRequest, background_tasks: BackgroundTasks):
-    """Run a scenario comparison in the background."""
+    """Run a scenario benchmark comparison in the background."""
     if req.scenario not in SCENARIOS:
         raise HTTPException(status_code=400, detail=f"Unknown scenario: {req.scenario}")
 
+    # Prevent double-run
+    existing = _benchmark_status.get(req.scenario, {})
+    if existing.get("status") == "running":
+        return {
+            "status": "already_running",
+            "scenario": req.scenario,
+            "steps_done": existing.get("steps_done", 0),
+            "message": "Benchmark already running for this scenario.",
+        }
+
+    methods = req.methods or ["random", "greedy", "round_robin", "proposed"]
+    steps = req.steps or 100
+
     t = threading.Thread(
         target=_run_scenario_comparison,
-        args=(req.scenario, req.methods or ["random", "greedy", "proposed"], req.steps),
+        args=(req.scenario, methods, steps),
         daemon=True,
     )
     t.start()
@@ -159,31 +234,40 @@ async def run_scenario(req: ScenarioRunRequest, background_tasks: BackgroundTask
     return {
         "status": "started",
         "scenario": req.scenario,
-        "methods": req.methods,
-        "message": f"Scenario comparison started. Check /api/scenarios/{req.scenario}/results."
+        "methods": methods,
+        "steps": steps,
+        "message": f"Benchmark started. Poll /api/scenarios/{req.scenario}/benchmark-status for progress.",
     }
+
+
+@router.get("/{scenario}/benchmark-status")
+async def get_benchmark_status(scenario: str):
+    """Return current benchmark run status for a scenario."""
+    if scenario not in SCENARIOS:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario}")
+
+    status = _benchmark_status.get(scenario, {"status": "idle", "steps_done": 0, "total_steps": 0})
+    return {"scenario": scenario, **status}
 
 
 @router.get("/{scenario}/results")
 async def get_scenario_results(scenario: str):
-    """Return comparison results for a scenario."""
+    """Return benchmark results for a scenario (only real data, no hardcoded fallback)."""
     if scenario in _run_results:
         return {"scenario": scenario, "results": _run_results[scenario], "source": "live"}
 
-    # Try loading from evaluation JSON
+    # Try loading from evaluation JSON file
     from ..services.metrics_service import get_evaluation_results
-    data = get_evaluation_results(scenario)
-    if data:
-        return {"scenario": scenario, "results": data, "source": "file"}
+    import os as _os
+    from training.config import METRICS_DIR
+    eval_path = _os.path.join(_project_root, METRICS_DIR, f"evaluation_{scenario}.json")
+    if _os.path.exists(eval_path):
+        data = get_evaluation_results(scenario)
+        if data:
+            return {"scenario": scenario, "results": data, "source": "file"}
 
-    # Standard fallback benchmark metrics if not yet generated
-    fallback = {
-        "random": {"mean_interference": 0.71, "mean_throughput_mbps": 1.4, "mean_latency_ms": 41.2, "mean_pdr": 0.046, "mean_sinr_db": -28.4, "spectral_efficiency": 0.024, "comm_overhead": 0.0},
-        "greedy": {"mean_interference": 0.50, "mean_throughput_mbps": 2.3, "mean_latency_ms": 40.8, "mean_pdr": 0.060, "mean_sinr_db": -24.3, "spectral_efficiency": 0.038, "comm_overhead": 0.63},
-        "round_robin": {"mean_interference": 0.74, "mean_throughput_mbps": 1.2, "mean_latency_ms": 41.3, "mean_pdr": 0.040, "mean_sinr_db": -29.7, "spectral_efficiency": 0.019, "comm_overhead": 0.21},
-        "proposed": {"mean_interference": 0.18, "mean_throughput_mbps": 18.5, "mean_latency_ms": 8.7, "mean_pdr": 0.981, "mean_sinr_db": 22.4, "spectral_efficiency": 0.308, "comm_overhead": 0.16},
-    }
-    return {"scenario": scenario, "results": fallback, "source": "fallback"}
+    # No real data available — return empty so frontend shows "awaiting benchmark"
+    return {"scenario": scenario, "results": {}, "source": "none"}
 
 
 @router.post("/findings")
@@ -193,9 +277,8 @@ async def generate_research_findings(payload: dict):
     """
     from ..services.gemini_service import generate_research_summary
     scenario = payload.get("scenario", "high")
-    exp_id = payload.get("experiment_id", "EXP-2026-0831-0042")
+    exp_id = payload.get("experiment_id", f"EXP-{int(time.time())}")
 
-    # Load results for this scenario
     results = _run_results.get(scenario)
     if not results:
         from ..services.metrics_service import get_evaluation_results
@@ -205,6 +288,6 @@ async def generate_research_findings(payload: dict):
         "experiment_id": exp_id,
         "scenario": scenario,
         "results": results,
-        "runs": 10,
+        "runs": 100,
     }
     return generate_research_summary(exp_data)

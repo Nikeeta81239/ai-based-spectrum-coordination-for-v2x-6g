@@ -35,8 +35,11 @@ export const api = {
   // AI Model
   getAIStatus: () => client.get('/api/ai/status'),
   trainModel: (params) => client.post('/api/ai/train', params),
+  stopAI: () => client.post('/api/ai/stop'),
   evaluateModel: (scenario) => client.post(`/api/ai/evaluate?scenario=${scenario}`),
   getAttention: () => client.get('/api/ai/attention'),
+  getCheckpoints: () => client.get('/api/ai/checkpoints'),
+  loadCheckpoint: (id) => client.post(`/api/ai/checkpoints/load?checkpoint_id=${id}`),
 
   // Explainability
   getExplanation: (vehicleId) => client.get(`/api/explainability/${vehicleId}`),
@@ -44,17 +47,18 @@ export const api = {
   getGeminiAssistant: (data) => client.post('/api/explainability/assistant', data),
   askGeminiDecision: (data) => client.post('/api/explainability/ask', data),
 
+  // Scenarios / Benchmark
+  getScenarios: () => client.get('/api/scenarios'),
+  runScenario: (data) => client.post('/api/scenarios/run', data),
+  getScenarioResults: (scenario) => client.get(`/api/scenarios/${scenario}/results`),
+  getBenchmarkStatus: (scenario) => client.get(`/api/scenarios/${scenario}/benchmark-status`),
+  getGeminiFindings: (data) => client.post('/api/scenarios/findings', data),
+
   // Metrics
   getMetrics: () => client.get('/api/metrics'),
   getPrivacyMetrics: () => client.get('/api/metrics/privacy'),
   getMetricsComparison: (scenario = 'low') => client.get(`/api/metrics/comparison?scenario=${scenario}`),
   getTrainingMetrics: () => client.get('/api/metrics/training'),
-
-  // Scenarios
-  getScenarios: () => client.get('/api/scenarios'),
-  runScenario: (data) => client.post('/api/scenarios/run', data),
-  getScenarioResults: (scenario) => client.get(`/api/scenarios/${scenario}/results`),
-  getGeminiFindings: (data) => client.post('/api/scenarios/findings', data),
 };
 
 export default api;

@@ -1,13 +1,21 @@
-import React from 'react';
-import { History, FileText, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { History } from 'lucide-react';
+import api from '../api/api';
+import { formatPercent } from '../utils/formatters';
 
 export function ExplanationHistoryLog({ onSelectVehicle }) {
-  const historyItems = [
-    { time: '08:31:04', vid: 'veh_024', ch: 'CH4', strength: 'High' },
-    { time: '08:31:08', vid: 'veh_017', ch: 'CH2', strength: 'Medium' },
-    { time: '08:31:12', vid: 'veh_031', ch: 'CH5', strength: 'High' },
-    { time: '08:31:16', vid: 'bus_001', ch: 'CH1', strength: 'High' },
-  ];
+  const [historyItems, setHistoryItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getAllExplanations()
+      .then((r) => {
+        const items = r.data?.explanations || [];
+        setHistoryItems(items);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="p-5 rounded-2xl glass-card border border-purple-500/30 font-mono space-y-4 shadow-xl">
@@ -17,27 +25,49 @@ export function ExplanationHistoryLog({ onSelectVehicle }) {
           EXPLANATION HISTORY LOG
         </h3>
         <span className="text-[10px] text-purple-300 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-500/30">
-          LOGGED XAI RECORDS
+          {historyItems.length} XAI RECORDS
         </span>
       </div>
 
+      {loading && (
+        <p className="text-xs text-slate-500 text-center py-2">Loading XAI records…</p>
+      )}
+
+      {!loading && historyItems.length === 0 && (
+        <p className="text-xs text-slate-500 text-center py-2">
+          No explanation records yet. Run a simulation to generate XAI logs.
+        </p>
+      )}
+
       <div className="space-y-2">
-        {historyItems.map((item, idx) => (
-          <div
-            key={idx}
-            onClick={() => onSelectVehicle && onSelectVehicle(item.vid)}
-            className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-purple-500/40 cursor-pointer flex items-center justify-between text-xs transition-all"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-500">{item.time}</span>
-              <strong className="text-white font-bold">{item.vid} → {item.ch}</strong>
+        {historyItems.map((item, idx) => {
+          const chLabel = item.channel_label || (item.selected_channel !== undefined ? `CH${item.selected_channel + 1}` : '—');
+          const confidence = item.confidence !== undefined ? formatPercent(item.confidence) : '—';
+          const appType = item.app_type || 'normal';
+
+          return (
+            <div
+              key={idx}
+              onClick={() => onSelectVehicle && onSelectVehicle(item.vehicle_id)}
+              className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-purple-500/40 cursor-pointer flex items-center justify-between text-xs transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500 uppercase">{appType}</span>
+                <strong className="text-white font-bold">
+                  {item.vehicle_id} → {chLabel}
+                </strong>
+              </div>
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="text-slate-400">
+                  Confidence: <strong className="text-emerald-400">{confidence}</strong>
+                </span>
+                <span className="text-purple-400 bg-purple-950 px-2 py-0.5 rounded border border-purple-800">
+                  XAI
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-[10px]">
-              <span className="text-slate-400">Evidence: <strong className="text-emerald-400">{item.strength}</strong></span>
-              <span className="text-purple-400 bg-purple-950 px-2 py-0.5 rounded border border-purple-800">Generated</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

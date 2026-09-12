@@ -37,6 +37,7 @@ class SimulationStatusResponse(BaseModel):
 
 
 class SimulationCurrentResponse(BaseModel):
+    scenario: Optional[str] = "low"
     time_step: float
     num_vehicles: int
     vehicles: List[Dict[str, Any]]

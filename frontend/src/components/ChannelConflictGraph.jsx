@@ -74,8 +74,8 @@ export function ChannelConflictGraph({ channels = [], vehicles = [] }) {
           <div className="flex flex-wrap items-center justify-center gap-4">
             {assigned.slice(0, 5).map((vid, idx) => (
               <div key={idx} className="flex flex-col items-center">
-                <div className="w-10 h-10 rounded-full border border-purple-500/50 bg-purple-950/40 flex items-center justify-center text-purple-300 font-bold text-xs shadow-md">
-                  {vid}
+                <div className="min-w-10 px-2 h-10 rounded-full border border-purple-500/50 bg-purple-950/40 flex items-center justify-center text-purple-300 font-bold text-xs shadow-md">
+                  {vid.toString().toLowerCase().startsWith('veh') ? vid : `Veh ${vid}`}
                 </div>
                 <span className="text-[9px] text-slate-400 mt-1">Agent {idx + 1}</span>
               </div>
@@ -113,16 +113,32 @@ export function ChannelConflictGraph({ channels = [], vehicles = [] }) {
           </div>
 
           <div className="space-y-1.5 pt-1">
-            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-              <ArrowRightLeft className="w-3 h-3 text-cyan-400" /> Main Vehicle Conflicts:
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                <ArrowRightLeft className="w-3 h-3 text-cyan-400" /> Main Vehicle Conflicts:
+              </div>
+              <span className="text-[10px] text-slate-500 font-sans">Co-channel radio contention pairs</span>
             </div>
             {conflicts.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {conflicts.map((pair, idx) => (
-                  <span key={idx} className="px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-950/30 text-amber-300 text-[11px] font-bold">
-                    {pair}
-                  </span>
-                ))}
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap gap-1.5">
+                  {conflicts.map((pair, idx) => {
+                    // Normalize "103 ↔ 104" to "Veh 103 ↔ Veh 104"
+                    const formattedPair = pair
+                      .split('↔')
+                      .map((s) => s.trim())
+                      .map((v) => (v.toLowerCase().startsWith('veh') ? v : `Veh ${v}`))
+                      .join(' ↔ ');
+                    return (
+                      <span key={idx} className="px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-950/30 text-amber-300 text-[11px] font-bold">
+                        {formattedPair}
+                      </span>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 font-sans leading-tight">
+                  <span className="text-amber-400 font-bold">What this means:</span> These vehicle pairs are transmitting on this same frequency at the same time, interfering with each other's V2X signals.
+                </p>
               </div>
             ) : (
               <p className="text-[11px] text-emerald-400 italic">No co-channel vehicle conflicts detected on this subchannel.</p>

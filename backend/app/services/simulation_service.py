@@ -471,6 +471,7 @@ class SimulationService:
                 "latency_ms":       round(vs.latency_ms, 2),
                 "app_type":         vs.app_type,
                 "num_neighbours":   vs.num_neighbours,
+                "neighboring_vehicles": getattr(vs, "neighboring_vehicles", []),
                 "traffic_density":  round(vs.traffic_density, 4),
                 "heading":          round(float(getattr(vs, "heading", 0.0)), 1),
                 "vehicle_type":     getattr(vs, "vehicle_type", "car"),
@@ -514,7 +515,11 @@ class SimulationService:
                 conflicts = []
                 for i in range(min(4, len(ch_users))):
                     for j in range(i + 1, min(4, len(ch_users))):
-                        conflicts.append(f"{ch_users[i]} ↔ {ch_users[j]}")
+                        u1 = str(ch_users[i])
+                        u2 = str(ch_users[j])
+                        v1 = u1 if u1.lower().startswith("veh") else f"Veh {u1}"
+                        v2 = u2 if u2.lower().startswith("veh") else f"Veh {u2}"
+                        conflicts.append(f"{v1} ↔ {v2}")
 
                 channels.append({
                     "channel_id":        ch.channel_id,
@@ -603,7 +608,7 @@ class SimulationService:
                         "channel": f"CH{prev_ch + 1}",
                         "sinr_db": prev_v["sinr_db"],
                     },
-                    "decision": f"{vid} → CH{ch_idx + 1}",
+                    "decision": f"Veh {vid} → Switched to CH{ch_idx + 1}",
                     "after": {
                         "latency_ms": v["latency_ms"],
                         "interference": "Low" if v["interference"] < 0.3 else "Moderate",
@@ -671,6 +676,7 @@ class SimulationService:
         sim_step_val = sm.get("sumo_step", self.current_step)
 
         return {
+            "scenario": getattr(self, "scenario", "low"),
             "time_step": self.current_step,
             "simulation_time": sim_time_val,
             "sumo_step": sim_step_val,
@@ -710,6 +716,7 @@ class SimulationService:
     def get_current_snapshot(self) -> Dict[str, Any]:
         if not self._states:
             return {
+                "scenario": getattr(self, "scenario", "low"),
                 "time_step": 0,
                 "simulation_time": 0.0,
                 "sumo_step": 0,

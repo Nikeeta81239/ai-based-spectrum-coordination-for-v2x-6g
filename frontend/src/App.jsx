@@ -66,7 +66,7 @@ export function App() {
                 path="/privacy"
                 element={<Spectrum simulationState={simulationState} />}
               />
-              <Route path="/ai-model" element={<AIModel />} />
+              <Route path="/ai-model" element={<AIModel simulationState={simulationState} status={status} />} />
               <Route
                 path="/explainability"
                 element={<Explainability simulationState={simulationState} />}
